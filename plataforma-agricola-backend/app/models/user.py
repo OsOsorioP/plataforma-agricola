@@ -4,10 +4,10 @@ class UserBase(BaseModel):
     email: EmailStr
     full_name: str | None = None
     
-class UserCreate(BaseModel):
+class UserCreate(UserBase):
     password: str
     
-class User(BaseModel):
+class User(UserBase):
     id: int
     is_active: bool = True
     
