@@ -3,7 +3,7 @@ from pydantic import BaseModel
 class ParcelBase(BaseModel):
     name: str
     location: str | None=None
-    are: float
+    area: float
     
 class ParcelCreate(ParcelBase):
     pass
