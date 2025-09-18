@@ -1,0 +1,26 @@
+services:
+  postgres_db:
+    image: postgres:13
+    container_name: agri_postgres
+    environment:
+      POSTGRES_DB: agridb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: admin
+      # Configuraciones importantes para UTF-8
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=en_US.UTF-8 --lc-ctype=en_US.UTF-8"
+      LC_ALL: en_US.UTF-8
+      LANG: en_US.UTF-8
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    # Comando para asegurar UTF-8
+    command: >
+      postgres
+      -c client_encoding=UTF8
+      -c default_text_search_config=pg_catalog.english
+
+volumes:
+  postgres_data:
+    driver: local
