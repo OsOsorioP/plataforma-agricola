@@ -1,5 +1,6 @@
 from typing import TypedDict, Annotated, List
 from langgraph.graph.message import add_messages
+from langchain_core.messages import BaseMessage
 
 class GraphState(TypedDict):
     """
@@ -13,5 +14,8 @@ class GraphState(TypedDict):
         # diagnosis: Diagnóstico de una enfermedad.
         # recommendations: Lista de recomendaciones.
     """
+    user_id: int
     user_query: str
+    chat_history: List[BaseMessage]
+    recommendation_draft: str
     agent_response: str
