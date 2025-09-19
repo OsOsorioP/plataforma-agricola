@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api import users, parcels, chat
+from app.api import users, parcels, chat, auth 
 
 from app.db_models import Base
 from app.database import engine, Base, create_database_if_not_exists
@@ -36,6 +36,7 @@ async def startup_event():
 app.include_router(router=users.router, prefix="/users", tags=["Users"])
 app.include_router(router=parcels.router, prefix="/parcels", tags=["Parcels"])
 app.include_router(router=chat.router, prefix="/chat", tags=["Chat"])
+app.include_router(router=auth.router, tags=["Authentication"])
 
 @app.get("/")
 def read_root():
