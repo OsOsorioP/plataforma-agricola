@@ -21,6 +21,7 @@ def monitoring_agent_node(state: GraphState) -> dict:
         Un diccionario con las actualizaciones para el estado.
     """
     user_query = state["user_query"]
+    user_id = state["user_id"]
     
     prompt = ChatPromptTemplate.from_messages([
     (
@@ -42,8 +43,32 @@ def monitoring_agent_node(state: GraphState) -> dict:
     
     agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
     
+    input_for_executor = f"El usuario con ID {user_id} pregunta: {user_query}"
+    
     response = agent_executor.invoke({
-        "input": user_query
+        "input": input_for_executor
     })
     
-    return {"agent_response": response["output"]}
+    return {"recommendation_draft": response["output"]}
+
+def sustainability_agent_node(state: GraphState) -> dict:
+    """
+    Nodo del Agente de Sostenibilidad. Revisa las recomendaciones.
+    """
+    recommendation_draft = state["recommendation_draft"]
+    
+    prompt = f"""
+    Eres un experto en agricultura sostenible y prácticas ecológicas.
+    Tu tarea es revisar la siguiente recomendación agrícola:
+
+    "{recommendation_draft}"
+
+    Analízala desde una perspectiva de sostenibilidad.
+    - Si la recomendación es sostenible, apruébala y explica brevemente por qué.
+    - Si NO es sostenible (ej. sugiere un pesticida químico fuerte), recházala y propón una alternativa orgánica o de bajo impacto.
+    - Tu respuesta final será la que vea el agricultor.
+    """
+    
+    response = llm.invoke(prompt)
+    
+    return {"agent_response": response.content}
