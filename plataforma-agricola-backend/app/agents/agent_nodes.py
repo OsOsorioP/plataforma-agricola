@@ -35,6 +35,7 @@ def monitoring_agent_node(state: GraphState) -> dict:
         4.  Responde siempre en español.
         """
     ),
+    MessagesPlaceholder(variable_name="chat_history"),
     ("user", "{input}"),
     MessagesPlaceholder(variable_name="agent_scratchpad"),
     ])
@@ -46,7 +47,8 @@ def monitoring_agent_node(state: GraphState) -> dict:
     input_for_executor = f"El usuario con ID {user_id} pregunta: {user_query}"
     
     response = agent_executor.invoke({
-        "input": input_for_executor
+        "input": input_for_executor,
+        "chat_history": state["chat_history"]
     })
     
     return {"recommendation_draft": response["output"]}
