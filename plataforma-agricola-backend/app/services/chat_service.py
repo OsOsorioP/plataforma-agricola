@@ -66,17 +66,23 @@ def run_agent_graph(user_id: int, user_query: str) -> str:
         final_state (dict[str, Any]): respuesta del agente
     """
     try:
+        chat_history = load_chat_history(user_id=user_id)
+        
         initial_state = {
             "user_id": user_id,
             "user_query": user_query,
-            "chat_history": [],
+            "chat_history": chat_history,
             "recommendation_draft": "",
             "agent_response": ""
         }
         
         final_state = agent_graph.invoke(initial_state)
+        final_response = final_state.get("agent_response", "No se pudo obtener una respuesta.")
         
-        return final_state.get("agent_response", "No se pudo obtener una respuesta.")
+        save_chat_message(user_id, user_query, 'user')
+        save_chat_message(user_id, final_response, 'ai')
+        
+        return final_response
         
     except Exception as e:
         print(f"Error al ejecutar el grafo de agentes: {e}")
