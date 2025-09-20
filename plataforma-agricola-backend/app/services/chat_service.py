@@ -15,7 +15,7 @@ def save_chat_message(user_id: int, message_text: str, sender_type: str):
         message_text (str): El mensaje o texto del usuario o ia
         sender_type (str): El tipo de remitente user o ai
     """
-    db = SessionLocal
+    db = SessionLocal()
     try:
         db_message = db_models.ChatMessage(
             user_id=user_id,
@@ -25,7 +25,7 @@ def save_chat_message(user_id: int, message_text: str, sender_type: str):
         db.add(db_message)
         db.commit()
     finally:
-        db.close
+        db.close()
 
 def load_chat_history(user_id: int):
     """Esta funcion carga el chat history de la base de datos, luego lo transforma de mensaje humano o de ia para el modelo.
