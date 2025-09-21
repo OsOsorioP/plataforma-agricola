@@ -1,11 +1,9 @@
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import PromptTemplate
-from langchain_core.pydantic_v1 import BaseModel, Field
+from pydantic.v1 import BaseModel, Field
 
 from app.core.config import GOOGLE_API_KEY
 from app.agents.graph_state import GraphState
-
-llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash-exp", temperature=0, google_api_key=GOOGLE_API_KEY)
 
 class RouteQuery(BaseModel):
     """Enruta una consulta de usuario a un agente especialista."""
@@ -34,7 +32,7 @@ def get_router():
         input_variables=["query"],
     )
 
-    llm = ChatGoogleGenerativeAI(model="gemini-pro", google_api_key=GOOGLE_API_KEY)
+    llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash-exp", temperature=0, google_api_key=GOOGLE_API_KEY)
     structured_llm = llm.with_structured_output(RouteQuery)
     return prompt | structured_llm
 
@@ -48,6 +46,7 @@ def router_node(state: GraphState) -> str:
     result = query_router.invoke({"query": state["user_query"]})
     
     if result.destination:
+        print(f"-- Node enrutador: Decisión ir a {result.destination} --")
         return result.destination
     else:
         return "end"
