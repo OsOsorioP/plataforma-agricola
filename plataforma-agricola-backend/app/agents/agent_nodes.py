@@ -20,6 +20,7 @@ def general_tool_agent_node(state: GraphState) -> dict:
     Returns:
         Un diccionario con las actualizaciones para el estado.
     """
+    print("-- Node ejecutandose: General --")
     user_query = state["user_query"]
     user_id = state["user_id"]
     
@@ -51,12 +52,13 @@ def general_tool_agent_node(state: GraphState) -> dict:
         "chat_history": state["chat_history"]
     })
     
-    return {"recommendation_draft": response["output"]}
+    return {"recommendation_draft": response["output"], "agent_response": response["output"]}
 
 def sustainability_agent_node(state: GraphState) -> dict:
     """
     Nodo del Agente de Sostenibilidad. Revisa las recomendaciones.
     """
+    print("-- Node ejecutandose: sustainability --")
     recommendation_draft = state["recommendation_draft"]
     
     prompt = f"""
@@ -77,7 +79,7 @@ def sustainability_agent_node(state: GraphState) -> dict:
 
 def production_agent_node(state: GraphState) -> dict:
     """Nodo del Agente de Optimización de la Producción."""
-    
+    print("-- Node ejecutandose: Production --")
     prompt = f"""
     Eres un agrónomo experto en optimización de la producción.
     Basado en la siguiente pregunta del usuario y el historial de chat, proporciona una recomendación detallada para maximizar el rendimiento de los cultivos.
@@ -91,7 +93,7 @@ def production_agent_node(state: GraphState) -> dict:
 
 def water_agent_node(state: GraphState) -> dict:
     """Nodo del Agente de Gestión de Recursos Hídricos."""
-
+    print("-- Node ejecutandose: Water --")
     prompt = f"""
     Eres un hidrólogo experto en gestión del agua para la agricultura.
     Basado en la siguiente pregunta del usuario y el historial de chat, proporciona una recomendación detallada sobre riego, conservación y calidad del agua.
@@ -105,7 +107,7 @@ def water_agent_node(state: GraphState) -> dict:
 
 def supply_chain_agent_node(state: GraphState) -> dict:
     """Nodo del Agente de Optimización de la Cadena de Suministro."""
-
+    print("-- Node ejecutandose: Supply --")
     prompt = f"""
     Eres un experto en logística y cadena de suministro agrícola.
     Basado en la siguiente pregunta del usuario y el historial de chat, proporciona una recomendación detallada sobre inventario, transporte y comercialización.
