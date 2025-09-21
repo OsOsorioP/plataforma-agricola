@@ -4,9 +4,10 @@ from langchain.agents import create_tool_calling_agent, AgentExecutor
 
 from app.core.config import GOOGLE_API_KEY
 from app.agents.graph_state import GraphState
-from app.agents.agent_tools import get_parcel_details, list_user_parcels
+from app.agents.agent_tools import get_parcel_details, list_user_parcels, knowledge_base_tool 
 
 tools = [get_parcel_details, list_user_parcels]
+production_tools = [knowledge_base_tool]
 
 llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash-exp", temperature=0, google_api_key=GOOGLE_API_KEY)
 
@@ -80,16 +81,34 @@ def sustainability_agent_node(state: GraphState) -> dict:
 def production_agent_node(state: GraphState) -> dict:
     """Nodo del Agente de Optimización de la Producción."""
     print("-- Node ejecutandose: Production --")
-    prompt = f"""
-    Eres un agrónomo experto en optimización de la producción.
-    Basado en la siguiente pregunta del usuario y el historial de chat, proporciona una recomendación detallada para maximizar el rendimiento de los cultivos.
-    Pregunta: {state['user_query']}
-    Historial: {state['chat_history']}
-    """
     
-    response = llm.invoke(prompt)
+    user_query = state["user_query"]
+    user_id = state["user_id"]
     
-    return {"agent_response": response.content}
+    prompt = ChatPromptTemplate.from_messages([
+        ("system","""Eres un agrónomo experto en optimización de la producción. Tu principal habilidad es consultar una base de conocimiento agrícola especializada.
+
+        **Tu proceso de trabajo es estricto:**
+        1.  Analiza la pregunta del usuario.
+        2.  **SIEMPRE** debes usar la herramienta `knowledge_base_search` para encontrar la información más relevante y precisa en la base de conocimiento. No confíes únicamente en tu conocimiento general.
+        3.  Una vez que tengas la información de la herramienta, úsala para construir una respuesta clara y concisa para el agricultor.
+        4.  Si la base de conocimiento no devuelve información relevante, entonces y solo entonces, puedes usar tu conocimiento general para responder, pero debes indicar que la información no proviene de la base de conocimiento especializada.
+        5.  Responde siempre en español.
+        """),
+        ("user","{input}"),
+        MessagesPlaceholder(variable_name="chat_history"),
+        MessagesPlaceholder(variable_name="agent_scratchpad")
+    ])
+    
+    agent = create_tool_calling_agent(llm, production_tools, prompt)
+    agent_executor = AgentExecutor(agent=agent, tools=production_tools, verbose=True)
+    
+    response = agent_executor.invoke({
+        "input": f"El usuario con ID {user_id} pregunta: {user_query}",
+        "chat_history": state["chat_history"]
+    })
+    
+    return {"agent_response": response["output"]}
 
 def water_agent_node(state: GraphState) -> dict:
     """Nodo del Agente de Gestión de Recursos Hídricos."""
