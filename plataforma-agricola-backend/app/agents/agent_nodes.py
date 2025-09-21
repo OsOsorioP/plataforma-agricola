@@ -10,7 +10,7 @@ tools = [get_parcel_details, list_user_parcels]
 
 llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash-exp", temperature=0, google_api_key=GOOGLE_API_KEY)
 
-def monitoring_agent_node(state: GraphState) -> dict:
+def general_tool_agent_node(state: GraphState) -> dict:
     """
     Nodo del Agente de Monitoreo, ahora potenciado con herramientas.
     
@@ -69,6 +69,48 @@ def sustainability_agent_node(state: GraphState) -> dict:
     - Si la recomendación es sostenible, apruébala y explica brevemente por qué.
     - Si NO es sostenible (ej. sugiere un pesticida químico fuerte), recházala y propón una alternativa orgánica o de bajo impacto.
     - Tu respuesta final será la que vea el agricultor.
+    """
+    
+    response = llm.invoke(prompt)
+    
+    return {"agent_response": response.content}
+
+def production_agent_node(state: GraphState) -> dict:
+    """Nodo del Agente de Optimización de la Producción."""
+    
+    prompt = f"""
+    Eres un agrónomo experto en optimización de la producción.
+    Basado en la siguiente pregunta del usuario y el historial de chat, proporciona una recomendación detallada para maximizar el rendimiento de los cultivos.
+    Pregunta: {state['user_query']}
+    Historial: {state['chat_history']}
+    """
+    
+    response = llm.invoke(prompt)
+    
+    return {"agent_response": response.content}
+
+def water_agent_node(state: GraphState) -> dict:
+    """Nodo del Agente de Gestión de Recursos Hídricos."""
+
+    prompt = f"""
+    Eres un hidrólogo experto en gestión del agua para la agricultura.
+    Basado en la siguiente pregunta del usuario y el historial de chat, proporciona una recomendación detallada sobre riego, conservación y calidad del agua.
+    Pregunta: {state['user_query']}
+    Historial: {state['chat_history']}
+    """
+    
+    response = llm.invoke(prompt)
+    
+    return {"agent_response": response.content}
+
+def supply_chain_agent_node(state: GraphState) -> dict:
+    """Nodo del Agente de Optimización de la Cadena de Suministro."""
+
+    prompt = f"""
+    Eres un experto en logística y cadena de suministro agrícola.
+    Basado en la siguiente pregunta del usuario y el historial de chat, proporciona una recomendación detallada sobre inventario, transporte y comercialización.
+    Pregunta: {state['user_query']}
+    Historial: {state['chat_history']}
     """
     
     response = llm.invoke(prompt)
