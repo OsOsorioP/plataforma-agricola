@@ -1,5 +1,7 @@
 from langchain.tools import tool
+from langchain.tools.retriever import create_retriever_tool
 
+from app.services.rag_service import get_retriever
 from app.database import SessionLocal
 from app import db_models
 
@@ -38,3 +40,11 @@ def list_user_parcels(user_id: int) -> str:
         return f"Parcelas del usuario {user.email} (ID: {user_id}): " + "; ".join(parcel_list)
     finally:
         db.close()
+      
+# Herramienta rag
+retriever = get_retriever()
+knowledge_base_tool = create_retriever_tool(
+        retriever,
+        "knowledge_base_search",
+        "Útil para buscar información específica y detallada sobre prácticas de manejo de cultivos, fertilizantes, control de plagas y optimización de la producción en la base de conocimiento agrícola."
+    )
