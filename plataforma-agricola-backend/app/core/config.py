@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 GOOGLE_API_KEY:str = os.getenv("GOOGLE_API_KEY")
+OPENWEATHER_API_KEY:str = os.getenv("OPENWEATHER_API_KEY")
 
 SECRET_KEY:str = os.getenv("SECRET_KEY")
 ALGORITHM:str = os.getenv("ALGORITHM")
