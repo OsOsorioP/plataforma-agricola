@@ -1,27 +1,37 @@
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
+
+from typing import List
+
 from app.models.parcel import Parcel, ParcelCreate
 from app import db_models
 from app.database import get_db
+from app.auth import get_current_user
 
 router = APIRouter()
 
 @router.post("/", response_model=Parcel, status_code=201)
-def create_parcel_for_user(owner_id: int, parcel: ParcelCreate, db: Session = Depends(get_db)):
-    # Verificamos que el usuario exista
-    owner = db.query(db_models.User).filter(db_models.User.id == owner_id).first()
-    if not owner:
-        raise HTTPException(status_code=404, detail="Owner user not found")
-        
-    db_parcel = db_models.Parcel(**parcel.model_dump(), owner_id=owner_id)
+def create_parcel_for_current_user(
+    parcel: ParcelCreate,
+    db: Session = Depends(get_db),
+    current_user: db_models.User = Depends(get_current_user)
+):
+    """
+    Crea una nueva parcela para el usuario actualmente autenticado.
+    El owner_id se obtiene automáticamente del token.
+    """
+    db_parcel = db_models.Parcel(**parcel.model_dump(), owner_id=current_user.id)
     db.add(db_parcel)
     db.commit()
     db.refresh(db_parcel)
     return db_parcel
 
-@router.get("/{parcel_id}", response_model=Parcel)
-def read_parcel(parcel_id: int, db: Session = Depends(get_db)):
-    db_parcel = db.query(db_models.Parcel).filter(db_models.Parcel.id == parcel_id).first()
-    if db_parcel is None:
-        raise HTTPException(status_code=404, detail="Parcel not found")
-    return db_parcel
+@router.get("/", response_model=List[Parcel])
+def read_parcels_for_current_user(
+    db: Session = Depends(get_db),
+    current_user: db_models.User = Depends(get_current_user)
+):
+    """
+    Obtiene la lista de parcelas del usuario actualmente autenticado.
+    """
+    return current_user.parcels
