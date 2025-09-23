@@ -1,73 +1,44 @@
 import { StyleSheet, View, Text, KeyboardAvoidingView, Platform, FlatList, TextInput, TouchableOpacity, ActivityIndicator } from "react-native";
-import type { ListRenderItemInfo } from "react-native";
-//import Button from '@/components/Button';
-//import ImageViewer from "@/components/ImageViewer";
-import { useCallback, useState } from "react";
-import { sendMessageToChat } from "@/services/ChatService";
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { useState } from "react";
+import { sendChatMessage } from '@/services/chat';
 
-//const PlaceholderImage = require('@/assets/images/background-image.png')
 
-type Props = {
+interface Message {
   id: string;
+  sender: 'user' | 'ai';
   text: string;
-  sender: string;
 }
 
 export default function Index() {
-  const [messages, setMessages] = useState<Props[]>([{ id: '1', text: '!Hola¡ Soy tu asistente Agrosmi. ¿En qué puedo ayudarte hoy?', sender: 'ai' }]);
-  const [inputText, setInputText] = useState<string>('');
-  const [isLoading, setIsLoading] = useState<boolean>(false)
+  const [messages, setMessages] = useState<Message[]>([{ id: '1', text: '!Hola¡ Soy tu asistente Agrosmi. ¿En qué puedo ayudarte hoy?', sender: 'ai' }]);
+  const [inputMessage, setInputMessage] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleSend = useCallback(async () => {
+  const handleSendMessage = async () => {
+    if (!inputMessage.trim()) return;
 
-    if (inputText.trim().length === 0 || isLoading) {
-      return;
-    }
-
-    const userMessage: Props = {
-      id: Date.now().toString(),
-      text: inputText,
-      sender: 'user',
-    };
-
-    setMessages(prevMessages => [...prevMessages, userMessage]);
-
-    setInputText('');
-
-    setIsLoading(true);
+    const userMessage: Message = { id: Date.now().toString() + 'user', sender: 'user', text: inputMessage };
+    setMessages((prevMessages) => [...prevMessages, userMessage]);
+    setInputMessage('');
+    setLoading(true);
 
     try {
-      const response = await sendMessageToChat(userMessage.text);
-
-      const aiResponse = {
-        id: Date.now().toString() + '-ai',
-        text: response.data.reply,
-        sender: 'ai',
-      };
-
-      setMessages(prevMessages => [...prevMessages, aiResponse]);
-
+      const response = await sendChatMessage(inputMessage);
+      const aiMessage: Message = { id: Date.now().toString() + 'ai', sender: 'ai', text: response.reply };
+      setMessages((prevMessages) => [...prevMessages, aiMessage]);
     } catch (error) {
-      console.error("Error al conectar con la API:", error);
-      const errorMessage = {
-        id: Date.now().toString() + '-error',
-        text: 'Lo siento, no pude conectarme con mis servidores. Por favor, inténtalo de nuevo.',
-        sender: 'ai',
-      };
-
-      setMessages(prevMessages => [...prevMessages, errorMessage]);
+      console.error('Error sending chat message:', error);
+      const errorMessage: Message = { id: Date.now().toString() + 'error', sender: 'ai', text: 'Lo siento, hubo un error al obtener la respuesta.' };
+      setMessages((prevMessages) => [...prevMessages, errorMessage]);
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
+  };
 
-  }, [inputText, isLoading]);
-
-  const renderMessage = ({ item }: ListRenderItemInfo<Props>) => (
-    <View style={[
-      styles.messageContainer,
-      item.sender === 'user' ? styles.userMessageContainer : styles.aiMessageContainer
-    ]}>
-      <Text style={item.sender === 'user' ? styles.userMessageText : styles.aiMessageText}>{item.text}</Text>
+  const renderMessage = ({ item }: { item: Message }) => (
+    <View style={[styles.messageBubble, item.sender === 'user' ? styles.userBubble : styles.aiBubble]}>
+      <Text style={item.sender === 'user' ? styles.userText : styles.aiText}>{item.text}</Text>
     </View>
   );
 
@@ -75,16 +46,17 @@ export default function Index() {
     <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       style={styles.container}
-      keyboardVerticalOffset={90}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 90}
     >
       <FlatList
         data={messages}
         renderItem={renderMessage}
         keyExtractor={item => item.id}
         style={styles.messageList}
+        initialScrollIndex={messages.length - 1}
       />
 
-      {isLoading && (
+      {loading && (
         <View style={styles.typingIndicatorContainer}>
           <Text style={styles.typingIndicatorText}>AgriAgent está escribiendo...</Text>
           <ActivityIndicator size="small" color="#666" />
@@ -94,13 +66,25 @@ export default function Index() {
       <View style={styles.inputContainer}>
         <TextInput
           style={styles.input}
-          value={inputText}
-          onChangeText={setInputText}
+          value={inputMessage}
+          onChangeText={setInputMessage}
           placeholder="Escribe tu mensaje..."
-          editable={!isLoading}
+          editable={!loading}
+          multiline
         />
-        <TouchableOpacity style={[styles.sendButton, isLoading && styles.sendButtonDisabled]} onPress={handleSend} disabled={isLoading}>
-          <Text style={styles.sendButtonText}>Enviar</Text>
+        <TouchableOpacity
+          style={[styles.sendButton, loading && styles.sendButtonDisabled]}
+          onPress={handleSendMessage}
+          disabled={loading}
+        >
+          <Ionicons name={'camera-outline'} size={15} color={'#e1e1e1'} />
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.sendButton, loading && styles.sendButtonDisabled]}
+          onPress={handleSendMessage}
+          disabled={loading}
+        >
+          <Ionicons name={'arrow-up-outline'} size={15} color={'#e1e1e1'} />
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
@@ -129,7 +113,6 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     padding: 15,
     marginVertical: 5,
-    maxWidth: '80%',
   },
   userMessageContainer: {
     backgroundColor: '#007bff',
@@ -144,13 +127,6 @@ const styles = StyleSheet.create({
   messageText: {
     fontSize: 16,
     color: '#333',
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    padding: 10,
-    borderTopWidth: 1,
-    borderTopColor: '#ccc',
-    backgroundColor: '#fff',
   },
   userMessageText: {
     fontSize: 16,
@@ -170,21 +146,32 @@ const styles = StyleSheet.create({
     color: '#666',
     marginRight: 10
   },
-  input: {
-    flex: 1,
-    height: 40,
-    borderColor: '#ccc',
+  inputContainer: {
+    flexDirection: 'row',
+    padding: 10,
     borderWidth: 1,
     borderRadius: 20,
+    alignItems: 'flex-end',
+  },
+  input: {
+    flex: 1,
+    minHeight: 45,
+    maxHeight: 150,
+    flexGrow: 1,
+    flexShrink: 1,
+    borderColor: '#ccc',
+    borderRadius: 20,
     paddingHorizontal: 15,
+    alignItems: 'center'
   },
   sendButton: {
-    marginLeft: 10,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#007bff',
-    borderRadius: 20,
-    paddingHorizontal: 20,
+    borderWidth: 1,
+    borderRadius: 16,
+    height: 24,
+    width: 24,
+    borderColor: 'gray',
   },
   sendButtonText: {
     color: '#fff',
@@ -192,5 +179,26 @@ const styles = StyleSheet.create({
   },
   sendButtonDisabled: {
     backgroundColor: '#a0c8ff'
-  }
+  },
+
+  messageBubble: {
+    padding: 10,
+    borderRadius: 15,
+    marginBottom: 10,
+    maxWidth: '80%',
+  },
+  userBubble: {
+    alignSelf: 'flex-end',
+    backgroundColor: '#007bff',
+  },
+  aiBubble: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#e0e0e0',
+  },
+  userText: {
+    color: 'white',
+  },
+  aiText: {
+    color: 'black',
+  },
 })
