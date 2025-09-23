@@ -4,10 +4,11 @@ from langchain.agents import create_tool_calling_agent, AgentExecutor
 
 from app.core.config import GOOGLE_API_KEY
 from app.agents.graph_state import GraphState
-from app.agents.agent_tools import get_parcel_details, list_user_parcels, knowledge_base_tool 
+from app.agents.agent_tools import get_parcel_details, list_user_parcels, knowledge_base_tool, get_weather_forecast
 
 tools = [get_parcel_details, list_user_parcels]
 production_tools = [knowledge_base_tool]
+water_tools = [get_weather_forecast]
 
 llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash-exp", temperature=0, google_api_key=GOOGLE_API_KEY)
 
@@ -113,16 +114,33 @@ def production_agent_node(state: GraphState) -> dict:
 def water_agent_node(state: GraphState) -> dict:
     """Nodo del Agente de Gestión de Recursos Hídricos."""
     print("-- Node ejecutandose: Water --")
-    prompt = f"""
-    Eres un hidrólogo experto en gestión del agua para la agricultura.
-    Basado en la siguiente pregunta del usuario y el historial de chat, proporciona una recomendación detallada sobre riego, conservación y calidad del agua.
-    Pregunta: {state['user_query']}
-    Historial: {state['chat_history']}
-    """
+    prompt = ChatPromptTemplate.from_messages([
+        (
+            "system",
+            """Eres un hidrólogo experto en gestión del agua para la agricultura. Tu principal habilidad es consultar el pronóstico del tiempo para dar recomendaciones de riego precisas.
+
+            **Proceso de trabajo:**
+            1.  Analiza la pregunta del usuario sobre riego.
+            2.  Si la pregunta incluye una ubicación, **DEBES** usar la herramienta `get_weather_forecast` para obtener el clima actual y futuro.
+            3.  Basa tu recomendación de riego directamente en el pronóstico. Si va a llover, recomienda no regar. Si está seco y caluroso, recomienda regar.
+            4.  Si no se proporciona una ubicación, pide al usuario que la especifique.
+            5.  Responde siempre en español.
+        """
+        ),
+        ("user", "{input}"),
+        MessagesPlaceholder(variable_name="chat_history"),
+        MessagesPlaceholder(variable_name="agent_scratchpad"),
+    ])
     
-    response = llm.invoke(prompt)
+    agent = create_tool_calling_agent(llm, water_tools, prompt)
+    agent_executor = AgentExecutor(agent=agent, tools=water_tools, verbose=True)
     
-    return {"agent_response": response.content}
+    response = agent_executor.invoke({
+        "input": state["user_query"],
+        "chat_history": state["chat_history"]
+    })
+    
+    return {"agent_response": response["output"]}
 
 def supply_chain_agent_node(state: GraphState) -> dict:
     """Nodo del Agente de Optimización de la Cadena de Suministro."""
