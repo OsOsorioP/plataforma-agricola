@@ -27,4 +27,4 @@ def read_root():
     """
     Endpoint de bienvenida
     """
-    return {"message":"Esta funcionando."}
+    return {"message":"Hello World."}
