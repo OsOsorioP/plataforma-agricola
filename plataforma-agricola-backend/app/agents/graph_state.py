@@ -1,4 +1,4 @@
-from typing import TypedDict, Annotated, List
+from typing import TypedDict, Optional, List
 from langgraph.graph.message import add_messages
 from langchain_core.messages import BaseMessage
 
@@ -19,3 +19,4 @@ class GraphState(TypedDict):
     chat_history: List[BaseMessage]
     recommendation_draft: str
     agent_response: str
+    image_base64: Optional[str]

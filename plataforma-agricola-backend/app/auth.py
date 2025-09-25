@@ -8,8 +8,8 @@ from passlib.context import CryptContext
 from datetime import datetime, timedelta
 
 from app.core.config import SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
-from app import db_models
-from app.database import get_db
+from app.db import db_models
+from app.db.database import get_db
 from sqlalchemy.orm import Session
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")

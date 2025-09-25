@@ -2,8 +2,8 @@ from langchain.tools import tool
 from langchain.tools.retriever import create_retriever_tool
 
 from app.services.rag_service import get_retriever
-from app.database import SessionLocal
-from app import db_models
+from app.db.database import SessionLocal
+from app.db import db_models
 from app.core.config import OPENWEATHER_API_KEY
 
 import requests

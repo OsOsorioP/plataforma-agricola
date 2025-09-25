@@ -42,7 +42,6 @@ def router_node(state: GraphState) -> str:
     """
     Nodo enrutador que decide el siguiente paso.
     """
-
     result = query_router.invoke({"query": state["user_query"]})
     
     if result.destination:
@@ -50,3 +49,11 @@ def router_node(state: GraphState) -> str:
         return result.destination
     else:
         return "end"
+    
+def image_pre_router(state: GraphState) -> str:
+    """Decide si hay una imagen para enviar al agente de visión."""
+    if state.get("image_base64"):
+        print(f"-- Node enrutador imagen: enrutando a visión--")
+        return "vision_agent"
+    else:
+        return "router"

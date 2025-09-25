@@ -4,8 +4,8 @@ from sqlalchemy.orm import Session
 from typing import List
 
 from app.models.parcel import Parcel, ParcelCreate
-from app import db_models
-from app.database import get_db
+from app.db import db_models
+from app.db.database import get_db
 from app.auth import get_current_user
 
 router = APIRouter()
