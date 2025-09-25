@@ -2,8 +2,10 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, AIMessage
 from app.core.config import GOOGLE_API_KEY
 from app.agents.graph_builder import agent_graph
-from app import db_models
-from app.database import SessionLocal
+from app.db import db_models
+from app.db.database import SessionLocal
+
+from typing import Optional
 
 from sqlalchemy.orm import Session
 
@@ -54,7 +56,7 @@ def load_chat_history(user_id: int):
     finally:
         db.close()
         
-def run_agent_graph(user_id: int, user_query: str) -> str:
+def run_agent_graph(user_id: int, user_query: str, image_base64: Optional[str] = None) -> str:
     """
     Ejecuta el grafo de agentes con la consulta del usuario.
     
@@ -73,7 +75,8 @@ def run_agent_graph(user_id: int, user_query: str) -> str:
             "user_query": user_query,
             "chat_history": chat_history,
             "recommendation_draft": "",
-            "agent_response": ""
+            "agent_response": "",
+            "image_base64": image_base64,
         }
         
         final_state = agent_graph.invoke(initial_state)
