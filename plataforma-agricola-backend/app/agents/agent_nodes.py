@@ -1,6 +1,7 @@
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.agents import create_tool_calling_agent, AgentExecutor
+from langchain_core.messages import HumanMessage
 
 from app.core.config import GOOGLE_API_KEY
 from app.agents.graph_state import GraphState
@@ -155,3 +156,34 @@ def supply_chain_agent_node(state: GraphState) -> dict:
     response = llm.invoke(prompt)
     
     return {"agent_response": response.content}
+
+def vision_agent_node(state: GraphState) -> dict:
+    """Nodo del Agente de Diagnóstico Visual."""
+    
+    prompt = f"""
+    Eres un fitopatólogo experto (especialista en enfermedades de plantas).
+    Analiza la siguiente imagen de un cultivo junto con la pregunta del usuario.
+    1. Identifica la planta en la imagen.
+    2. Diagnostica cualquier posible enfermedad, plaga o deficiencia nutricional visible.
+    3. Proporciona una recomendación clara y práctica para tratar el problema.
+    4. Si no puedes hacer un diagnóstico claro, explícalo y sugiere qué tipo de información adicional o fotos necesitarías.
+    
+    Pregunta del usuario: {state['user_query']}
+    """
+    
+    message = HumanMessage(
+        content=[
+            {"type": "text", "text": prompt},
+            {
+                "type": "image_url",
+                "image_url": f"data:image/jpeg;base64,{state['image_base64']}"
+            },
+        ]
+    )
+    
+    response = llm.invoke([message])
+    return {"agent_response": response.content}
+
+
+
+
