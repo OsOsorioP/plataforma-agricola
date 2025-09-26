@@ -5,11 +5,17 @@ from langchain_core.messages import HumanMessage
 
 from app.core.config import GOOGLE_API_KEY
 from app.agents.graph_state import GraphState
-from app.agents.agent_tools import get_parcel_details, list_user_parcels, knowledge_base_tool, get_weather_forecast
+from app.agents.agent_tools import (
+    get_parcel_details, list_user_parcels, 
+    knowledge_base_tool, 
+    get_weather_forecast,
+    get_market_price
+)
 
 tools = [get_parcel_details, list_user_parcels]
 production_tools = [knowledge_base_tool]
 water_tools = [get_weather_forecast]
+supply_tools = [get_market_price]
 
 llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash-exp", temperature=0, google_api_key=GOOGLE_API_KEY)
 
@@ -146,16 +152,33 @@ def water_agent_node(state: GraphState) -> dict:
 def supply_chain_agent_node(state: GraphState) -> dict:
     """Nodo del Agente de Optimización de la Cadena de Suministro."""
     print("-- Node ejecutandose: Supply --")
-    prompt = f"""
-    Eres un experto en logística y cadena de suministro agrícola.
-    Basado en la siguiente pregunta del usuario y el historial de chat, proporciona una recomendación detallada sobre inventario, transporte y comercialización.
-    Pregunta: {state['user_query']}
-    Historial: {state['chat_history']}
-    """
+    prompt = ChatPromptTemplate.from_messages([
+        (
+            "system",
+            """Eres un experto en logística y comercialización agrícola. Tienes dos herramientas principales:
+            1. `knowledge_base_search`: Úsala para responder preguntas sobre regulaciones, estándares de calidad, empaquetado y logística.
+            2. `get_market_price`: Úsala para obtener el precio de mercado actual de un producto.
+
+            Analiza la pregunta del usuario y utiliza la herramienta más apropiada para responder.
+            Si la pregunta es sobre calidad o regulaciones, usa la base de conocimiento.
+            Si la pregunta es sobre precios, usa la herramienta de precios de mercado.
+            Responde siempre en español.
+        """
+        ),
+        ("user", "{input}"),
+        MessagesPlaceholder(variable_name="chat_history"),
+        MessagesPlaceholder(variable_name="agent_scratchpad"),
+    ])
     
-    response = llm.invoke(prompt)
+    agent = create_tool_calling_agent(llm, supply_tools, prompt)
+    agent_executor = AgentExecutor(agent=agent, tools=supply_tools, verbose=True)
     
-    return {"agent_response": response.content}
+    response = agent_executor.invoke({
+        "input": state["user_query"],
+        "chat_history": state["chat_history"]
+    })
+    
+    return {"agent_response": response["output"]}
 
 def vision_agent_node(state: GraphState) -> dict:
     """Nodo del Agente de Diagnóstico Visual."""

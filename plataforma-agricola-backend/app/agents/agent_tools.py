@@ -90,3 +90,22 @@ def get_weather_forecast(location:str)->str:
         return f"Error HTTP al obtener el pronóstico: {http_err}"
     except Exception as e:
         return f"Ocurrió un error inesperado al obtener el pronóstico: {e}"
+    
+@tool
+def get_market_price(product_name: str) -> str:
+    """
+    Útil para obtener el precio de mercado actual y la tendencia para un producto agrícola específico.
+    El producto debe ser un nombre simple como 'tomate', 'maíz', etc.
+    """
+    print(f"---USANDO HERRAMIENTA: get_market_price para {product_name}---")
+    try:
+        response = requests.get(f"http://127.0.0.1:8000/mock/market-prices?product_name={product_name}")
+        response.raise_for_status()
+        data = response.json()
+        return f"El precio de mercado para '{product_name}' es de ${data['price_usd_kg']} USD por kg, con una tendencia '{data['trend']}'."
+    except requests.exceptions.HTTPError as http_err:
+        if http_err.response.status_code == 404:
+            return f"No se encontraron datos de precios para '{product_name}'."
+        return f"Error al obtener los precios: {http_err}"
+    except Exception as e:
+        return f"Ocurrió un error inesperado: {e}"

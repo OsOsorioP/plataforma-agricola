@@ -19,7 +19,7 @@ function InitialLoadingScreen() {
 
 export default function RootLayout() {
   return (
-    <SafeAreaProvider>
+    <SafeAreaProvider style={styles.container}>
       <SafeAreaView style={styles.container}>
         <AuthProvider>
           <InitialLoadingScreen />

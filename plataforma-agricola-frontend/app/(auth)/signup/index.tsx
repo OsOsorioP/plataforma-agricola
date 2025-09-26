@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { Alert, View, Text, TextInput, Button, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
-import { registerUser } from '@/services/auth'; // Importa la función de registro
+import { registerUser } from '@/services/auth';
 
 export default function Register() {
     const router = useRouter();
