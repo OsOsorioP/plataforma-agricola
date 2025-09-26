@@ -53,7 +53,8 @@ def router_node(state: GraphState) -> str:
 def image_pre_router(state: GraphState) -> str:
     """Decide si hay una imagen para enviar al agente de visión."""
     if state.get("image_base64"):
-        print(f"-- Node enrutador imagen: enrutando a visión--")
+        print("-- Node enrutador imagen: enrutando a visión--")
         return "vision_agent"
     else:
-        return "router"
+        print("-- Node enrutador imagen: enrutando a router, no hay imagen--")
+        return router_node(state)
