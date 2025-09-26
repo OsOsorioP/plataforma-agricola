@@ -15,7 +15,7 @@ from app.agents.agent_tools import (
 tools = [get_parcel_details, list_user_parcels]
 production_tools = [knowledge_base_tool]
 water_tools = [get_weather_forecast]
-supply_tools = [get_market_price]
+supply_tools = [knowledge_base_tool,get_market_price]
 
 llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash-exp", temperature=0, google_api_key=GOOGLE_API_KEY)
 
