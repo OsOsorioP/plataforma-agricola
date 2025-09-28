@@ -6,6 +6,7 @@ from app.db.database import SessionLocal
 from app.db import db_models
 from app.core.config import OPENWEATHER_API_KEY
 
+from datetime import datetime, timedelta
 import requests
 import json
 
@@ -109,3 +110,44 @@ def get_market_price(product_name: str) -> str:
         return f"Error al obtener los precios: {http_err}"
     except Exception as e:
         return f"Ocurrió un error inesperado: {e}"
+    
+@tool
+def get_historical_weather_summary(latitude: float, longitude: float) -> str:
+    """
+    Útil para obtener un resumen de datos meteorológicos históricos de los últimos 30 días para una latitud y longitud específicas.
+    Analiza los datos para identificar riesgos clave como heladas o estrés por calor.
+    """
+    print(f"---USANDO HERRAMIENTA: get_historical_weather_summary para Lat: {latitude}, Lon: {longitude}---")
+    try:
+        end_date = datetime.now().strftime('%Y-%m-%d')
+        start_date = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
+        
+        url = "https://archive-api.open-meteo.com/v1/archive"
+        params = {
+            "latitude": latitude,
+            "longitude": longitude,
+            "start_date": start_date,
+            "end_date": end_date,
+            "daily": "temperature_2m_max,temperature_2m_min,precipitation_sum",
+            "timezone": "auto"
+        }
+        
+        response = requests.get(url, params=params)
+        response.raise_for_status()
+        data = response.json()
+
+        # Se analiza los datos para generar un resumen de riesgos
+        min_temps = data['daily']['temperature_2m_min']
+        max_temps = data['daily']['temperature_2m_max']
+        
+        frost_risk_days = sum(1 for temp in min_temps if temp is not None and temp <= 2)
+        heat_stress_days = sum(1 for temp in max_temps if temp is not None and temp >= 35)
+
+        summary = (
+            f"Análisis de riesgo climático para los últimos 30 días en la ubicación ({latitude}, {longitude}):\n"
+            f"- Días con riesgo de helada (temp <= 2°C): {frost_risk_days} días.\n"
+            f"- Días con riesgo de estrés por calor (temp >= 35°C): {heat_stress_days} días.\n"
+        )
+        return summary
+    except Exception as e:
+        return f"Ocurrió un error al analizar los datos históricos del clima: {e}"
