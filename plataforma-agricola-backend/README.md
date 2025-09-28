@@ -49,8 +49,9 @@ uvicorn app.main:app --reload
 - [X] Seguridad OAuth (autorización)
 - [x] Arquitectura de Enrutamiento de Agentes
 - [x] Sistema de multiagentes
-- [ ] Retrieval-Augmented Generation (RAG)
-- [ ] Agentes multimodal
+- [x] Retrieval-Augmented Generation (RAG)
+- [x] Agentes multimodal
 - [ ] Fine-tuning
-- [ ] API's para los agentes
+- [ ] Sistema de alertas
+- [x] API's para los agentes
 - [ ] Agroclimatico, imagenes saltelites
