@@ -55,3 +55,6 @@ uvicorn app.main:app --reload
 - [ ] Sistema de alertas
 - [x] API's para los agentes
 - [ ] Agroclimatico, imagenes saltelites
+- [ ] Comunicación Inter-Agente
+- [ ] Memoria a largo plazo y personalización
+- [ ] Acciones en el mundo real (agentes activos)
