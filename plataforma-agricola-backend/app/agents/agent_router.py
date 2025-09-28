@@ -8,7 +8,7 @@ from app.agents.graph_state import GraphState
 class RouteQuery(BaseModel):
     """Enruta una consulta de usuario a un agente especialista."""
     destination: str = Field(
-        description="El nombre del agente especialista al que se debe enrutar la consulta. Debe ser uno de: ['production', 'water', 'supply_chain', 'general']"
+        description="El nombre del agente especialista al que se debe enrutar la consulta. Debe ser uno de: ['production', 'water', 'supply_chain', 'risk', 'general']"
     )
 
 def get_router():
@@ -22,6 +22,7 @@ def get_router():
         - 'production': Expertos en maximizar el rendimiento de los cultivos, sugerir prácticas de manejo, fertilizantes, etc.
         - 'water': Expertos en riego, gestión y conservación del agua.
         - 'supply_chain': Expertos en logística, inventario, transporte y venta de productos.
+        - 'risk': Expertos en analizar riesgos climáticos (heladas, sequías) y proponer planes de contingencia.
         - 'general': Equipo de soporte general que puede responder preguntas sobre datos de parcelas o temas no cubiertos por los especialistas.
 
         Pregunta del usuario:
@@ -53,7 +54,8 @@ def router_node(state: GraphState) -> str:
 def image_pre_router(state: GraphState) -> str:
     """Decide si hay una imagen para enviar al agente de visión."""
     if state.get("image_base64"):
-        print(f"-- Node enrutador imagen: enrutando a visión--")
+        print("-- Node enrutador imagen: enrutando a visión--")
         return "vision_agent"
     else:
-        return "router"
+        print("-- Node enrutador imagen: enrutando a router, no hay imagen--")
+        return router_node(state)

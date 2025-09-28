@@ -9,13 +9,15 @@ from app.agents.agent_tools import (
     get_parcel_details, list_user_parcels, 
     knowledge_base_tool, 
     get_weather_forecast,
-    get_market_price
+    get_market_price,
+    get_historical_weather_summary
 )
 
 tools = [get_parcel_details, list_user_parcels]
 production_tools = [knowledge_base_tool]
 water_tools = [get_weather_forecast]
-supply_tools = [get_market_price]
+supply_tools = [knowledge_base_tool,get_market_price]
+risk_tools = [knowledge_base_tool, get_historical_weather_summary]
 
 llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash-exp", temperature=0, google_api_key=GOOGLE_API_KEY)
 
@@ -182,7 +184,7 @@ def supply_chain_agent_node(state: GraphState) -> dict:
 
 def vision_agent_node(state: GraphState) -> dict:
     """Nodo del Agente de Diagnóstico Visual."""
-    
+    print("-- Node ejecutandose: vision --")
     prompt = f"""
     Eres un fitopatólogo experto (especialista en enfermedades de plantas).
     Analiza la siguiente imagen de un cultivo junto con la pregunta del usuario.
@@ -207,6 +209,34 @@ def vision_agent_node(state: GraphState) -> dict:
     response = llm.invoke([message])
     return {"agent_response": response.content}
 
+def risk_agent_node(state: GraphState) -> dict:
+    """Nodo del Agente de Predicción y Mitigación de Riesgos."""
+    print("-- Node ejecutandose: risk --")
+    prompt = ChatPromptTemplate.from_messages([
+        (
+            "system",
+            """Eres un analista de riesgos agrícolas y estratega. Tu trabajo es identificar riesgos y proponer planes de mitigación.
 
+            **Tu proceso de razonamiento es en dos pasos:**
+            1.  **Identificar y Cuantificar el Riesgo:** Usa la herramienta `get_historical_weather_summary` para analizar los datos climáticos históricos de la ubicación del usuario y confirmar la existencia y frecuencia de un riesgo (como heladas o sequías).
+            2.  **Proponer Solución:** Una vez confirmado el riesgo, usa la herramienta `knowledge_base_search` para encontrar el plan de contingencia o las acciones de mitigación recomendadas en el manual.
 
+            Combina la información de ambos pasos para dar una respuesta completa y bien fundamentada.
+            Responde siempre en español.
+            """
+        ),
+        ("user", "{input}"),
+        MessagesPlaceholder(variable_name="chat_history"),
+        MessagesPlaceholder(variable_name="agent_scratchpad"),
+    ])
 
+    agent = create_tool_calling_agent(llm, risk_tools, prompt)
+    agent_executor = AgentExecutor(agent=agent, tools=risk_tools, verbose=True)
+    
+    response = agent_executor.invoke({
+        "input": state["user_query"],
+        "chat_history": state["chat_history"]
+    })
+    
+    return {"agent_response": response["output"]}
+    

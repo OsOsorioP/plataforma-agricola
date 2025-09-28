@@ -93,7 +93,7 @@ export default function Index() {
           onPress={pickImage}
           disabled={loading}
         >
-          <Ionicons name={'camera-outline'} size={15} color={'#e1e1e1'} />
+          <Ionicons name={'grid-outline'} size={15} color={'#e1e1e1'} />
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.sendButton, loading && styles.sendButtonDisabled]}
