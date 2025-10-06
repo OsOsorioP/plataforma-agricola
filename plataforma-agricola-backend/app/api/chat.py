@@ -7,11 +7,11 @@ from app.db import db_models
 router = APIRouter()
 
 @router.post("/", response_model=ChatResponse)
-def handle_chat(request: ChatRequest, current_user: db_models.User = Depends(get_current_user)):
+async def handle_chat(request: ChatRequest, current_user: db_models.User = Depends(get_current_user)):
     """
     Recibe un mensaje del usuario y devuelve una respuesta generada por la IA.
     """
-    ai_reply = run_agent_graph(
+    ai_reply = await run_agent_graph(
         user_id=current_user.id, 
         user_query=request.message,
         image_base64=request.image_base64)

@@ -56,7 +56,7 @@ def load_chat_history(user_id: int):
     finally:
         db.close()
         
-def run_agent_graph(user_id: int, user_query: str, image_base64: Optional[str] = None) -> str:
+async def run_agent_graph(user_id: int, user_query: str, image_base64: Optional[str] = None) -> str:
     """
     Ejecuta el grafo de agentes con la consulta del usuario.
     
@@ -79,7 +79,7 @@ def run_agent_graph(user_id: int, user_query: str, image_base64: Optional[str] =
             "image_base64": image_base64,
         }
         
-        final_state = agent_graph.invoke(initial_state)
+        final_state = await  agent_graph.ainvoke(initial_state)
         final_response = final_state.get("agent_response", "No se pudo obtener una respuesta.")
         
         save_chat_message(user_id, user_query, 'user')
@@ -91,7 +91,7 @@ def run_agent_graph(user_id: int, user_query: str, image_base64: Optional[str] =
         print(f"Error al ejecutar el grafo de agentes: {e}")
         return "Lo siento, he tenido un problema para procesar tu solicitud a través del sistema de agentes."
 
-def get_ai_response(user_query: str) -> str:
+async def get_ai_response(user_query: str) -> str:
     """
     Función simple para obtener una respuesta de Gemini a una consulta.
     
@@ -104,7 +104,7 @@ def get_ai_response(user_query: str) -> str:
     try:
         llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash-exp", temperature=0, google_api_key=GOOGLE_API_KEY)
         
-        response = llm.invoke(user_query)
+        response = await llm.invoke(user_query)
         
         return response.content
         

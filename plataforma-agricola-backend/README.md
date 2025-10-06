@@ -45,9 +45,9 @@ uvicorn app.main:app --reload
 
 ### Checklist
 - [x] Modelos de usuario y parcela
-- [x] Conexión a base de datos
+- [x] Conexión a base de datos (tools)
 - [X] Seguridad OAuth (autorización)
-- [x] Arquitectura de Enrutamiento de Agentes
+- [x] Arquitectura de Enrutamiento de Agentes (graph)
 - [x] Sistema de multiagentes
 - [x] Retrieval-Augmented Generation (RAG)
 - [x] Agentes multimodal
@@ -55,6 +55,7 @@ uvicorn app.main:app --reload
 - [ ] Sistema de alertas
 - [x] API's para los agentes
 - [ ] Agroclimatico, imagenes saltelites
-- [ ] Comunicación Inter-Agente
+- [x] Comunicación Inter-Agente
 - [ ] Memoria a largo plazo y personalización
 - [ ] Acciones en el mundo real (agentes activos)
+- [ ] Diferentes modelos IA
