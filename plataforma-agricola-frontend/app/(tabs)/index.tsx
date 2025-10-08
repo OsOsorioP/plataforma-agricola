@@ -110,47 +110,11 @@ export default function Index() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#25292e',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  imageContainer: {
-    flex: 1,
-  },
-  footerContainer: {
-    flex: 1 / 3,
-    alignItems: 'center',
+    backgroundColor: '#fff',
   },
   messageList: {
     flex: 1,
-    padding: 10,
-  },
-  messageContainer: {
-    borderRadius: 20,
-    padding: 15,
-    marginVertical: 5,
-  },
-  userMessageContainer: {
-    backgroundColor: '#007bff',
-    alignSelf: 'flex-end',
-  },
-  aiMessageContainer: {
-    backgroundColor: '#ffffff',
-    alignSelf: 'flex-start',
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-  },
-  messageText: {
-    fontSize: 16,
-    color: '#333',
-  },
-  userMessageText: {
-    fontSize: 16,
-    color: '#fff'
-  },
-  aiMessageText: {
-    fontSize: 16,
-    color: '#333'
+    padding: 5,
   },
   typingIndicatorContainer: {
     flexDirection: 'row',
@@ -189,19 +153,13 @@ const styles = StyleSheet.create({
     width: 24,
     borderColor: 'gray',
   },
-  sendButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
-  },
   sendButtonDisabled: {
     backgroundColor: '#a0c8ff'
   },
-
   messageBubble: {
     padding: 10,
     borderRadius: 15,
     marginBottom: 10,
-    maxWidth: '80%',
   },
   userBubble: {
     alignSelf: 'flex-end',
