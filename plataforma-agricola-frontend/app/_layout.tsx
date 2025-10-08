@@ -1,6 +1,6 @@
 // app/_layout.tsx
 import { Stack } from 'expo-router';
-import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ActivityIndicator, View, StyleSheet} from 'react-native';
 import { useAuth, AuthProvider } from '@/context/AuthContext';
 
@@ -20,7 +20,7 @@ function InitialLoadingScreen() {
 export default function RootLayout() {
   return (
     <SafeAreaProvider style={styles.container}>
-      <SafeAreaView style={styles.container}>
+
         <AuthProvider>
           <InitialLoadingScreen />
           <Stack screenOptions={{
@@ -31,7 +31,6 @@ export default function RootLayout() {
             <Stack.Screen name="+not-found" />
           </Stack>
         </AuthProvider>
-      </SafeAreaView>
     </SafeAreaProvider>
   );
 }
