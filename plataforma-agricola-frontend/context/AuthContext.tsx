@@ -1,103 +1,100 @@
-// src/context/AuthContext.tsx
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useState, ReactNode, useContext, useEffect } from 'react';
 import * as SecureStore from 'expo-secure-store';
-import { login as apiLogin, logout as apiLogout } from '@/services/auth'; // Asegúrate de que la ruta sea correcta
-import { useRouter, useSegments } from 'expo-router';
+import { login, register } from '@/services/authService';
+import { useRouter } from 'expo-router';
+import { AuthContextProps, DecodedTokenProps, UserProps } from '@/types/auth';
+import { jwtDecode } from 'jwt-decode'
 import { Alert } from 'react-native';
 
-interface AuthContextType {
-  token: string | null;
-  isLoading: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  logout: () => Promise<void>;
-}
+export const AuthContext = createContext<AuthContextProps>({
+  token: null,
+  user: null,
+  signIn: async () => { },
+  signUp: async () => { },
+  signOut: async () => { },
+  updateToken: async () => { },
+});
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-export function useAuth() {
-  const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
-}
-
-export function AuthProvider({ children }: { children: ReactNode }) {
+export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [token, setToken] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const router = useRouter();
-  const segments = useSegments();
+  const [user, setUser] = useState<UserProps | null>(null);
+  const router = useRouter()
 
-  // Cargar el token al iniciar la app
   useEffect(() => {
-    const loadToken = async () => {
-      try {
-        const storedToken = await SecureStore.getItemAsync('access_token');
-        if (storedToken) {
-          setToken(storedToken);
-        }
-      } catch (e) {
-        console.error("Failed to load auth token:", e);
-      } finally {
-        setIsLoading(false);
-      }
-    };
     loadToken();
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
-  // Redirigir basado en el estado de autenticación
-  useEffect(() => {
-    if (!isLoading) {
-      const inAuthGroup = segments[0] === '(auth)';
-
-      if (token && inAuthGroup) {
-        // Usuario logueado, redirigir a la app principal (tabs)
-        router.replace('/(tabs)');
-      } else if (!token && !inAuthGroup) {
-        // Usuario no logueado, redirigir a la pantalla de login
-        router.replace('/(auth)/signin'); // Asegúrate de que esta sea la ruta correcta a tu pantalla de login
+  const loadToken = async () => {
+    const storedToken = await SecureStore.getItemAsync("token");
+    if (storedToken) {
+      try {
+        const decoded = jwtDecode<DecodedTokenProps>(storedToken);
+        if (decoded.exp && decoded.exp < Date.now() / 1000) {
+          await SecureStore.deleteItemAsync("token")
+          goToWelcomePage();
+          return;
+        }
+        setToken(storedToken);
+        setUser(decoded.user)
+        goToHomePage();
+      } catch (error: any) {
+        const errorMsg = error?.message
+        Alert.alert("Ocurrio un error: ", errorMsg)
+        goToWelcomePage();
       }
+    } else {
+      goToWelcomePage();
     }
-  }, [token, isLoading, segments]);
+  }
 
-  const login = async (email: string, password: string) => {
-    setIsLoading(true);
-    try {
-      const authData = await apiLogin(email, password);
-      await SecureStore.setItemAsync('access_token', authData.access_token);
-      setToken(authData.access_token);
-      router.replace('/(tabs)'); // Redirigir a la app principal
-    } catch (error: any) {
-      console.error('Login error:', error);
-      Alert.alert('Error de Inicio de Sesión', error.response?.data?.detail || 'Credenciales incorrectas o error de red.');
-      setToken(null); // Asegúrate de que el token se limpie si hay un error
-      throw error; // Re-lanza el error para que el componente que llama pueda manejarlo
-    } finally {
-      setIsLoading(false);
+  const goToHomePage = () => {
+    setTimeout(() => {
+      router.replace("/(tabs)/chat")
+    }, 1500)
+  }
+
+  const goToWelcomePage = () => {
+    setTimeout(() => {
+      router.replace("/(auth)/welcome")
+    }, 1500)
+  }
+
+  const updateToken = async (token: string | null) => {
+    if (token) {
+      setToken(token);
+      await SecureStore.setItemAsync("token", token);
+      // decode token (user)
+      const decoded = jwtDecode<DecodedTokenProps>(token)
+      console.log("decoded token: ", decoded)
+      setUser(decoded.user)
     }
-  };
+  }
 
-  const logout = async () => {
-    setIsLoading(true);
-    try {
-      await apiLogout();
-      await SecureStore.deleteItemAsync('access_token');
-      setToken(null);
-      router.replace('/(auth)/signin'); // Redirigir a la pantalla de login
-    } catch (e) {
-      console.error("Failed to logout:", e);
-      Alert.alert('Error al cerrar sesión', 'No se pudo cerrar la sesión correctamente.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const signIn = async (email: string, password: string) => {
+    const response = await login(email, password);
+    await updateToken(response.token);
+    router.replace("/(tabs)/chat")
+  }
 
-  const value = {
-    token,
-    isLoading,
-    login,
-    logout,
-  };
+  const signUp = async (email: string, password: string, username: string, avatar?: string | null) => {
+    const response = await register(email, password, username, avatar);
+    await updateToken(response.token);
+    router.replace("/(tabs)/chat")
+  }
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-}
+  const signOut = async () => {
+    setToken(null);
+    setUser(null);
+    await SecureStore.deleteItemAsync("token");
+    router.replace("/(auth)/welcome")
+  }
+
+  return (
+    <AuthContext.Provider value={{ token, user, signIn, signUp, signOut, updateToken }}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+export const useAuth = () => useContext(AuthContext)
