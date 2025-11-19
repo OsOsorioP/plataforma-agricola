@@ -1,9 +1,11 @@
 from pydantic import BaseModel
+from typing import Optional
 
 class ParcelBase(BaseModel):
     name: str
-    location: str | None=None
+    location: Optional[str] = None
     area: float
+    geometry: Optional[str] = None
     
 class ParcelCreate(ParcelBase):
     pass
