@@ -2,9 +2,11 @@ export interface ParcelBase {
   name: string;
   location?: string;
   area: number;
+  geometry: string;
 }
 
-export interface ParcelCreate extends ParcelBase {}
+export interface ParcelCreate extends ParcelBase {
+}
 
 export interface Parcel extends ParcelBase {
   id: number;

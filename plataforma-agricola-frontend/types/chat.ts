@@ -3,12 +3,12 @@ export interface ChatRequest {
 }
 
 export interface ChatResponse {
-  reply: string;
+  reply: string[];
 }
 
 export interface Message {
   id: string;
   sender: 'user' | 'ai';
   text?: string;
-  imageUrl?: string | null;
+  imageUrl?: string | null | undefined;
 }

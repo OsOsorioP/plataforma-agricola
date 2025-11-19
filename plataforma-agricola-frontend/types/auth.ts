@@ -1,18 +1,32 @@
-export interface UserBase {
+export interface UserProps {
   email: string;
-  full_name?: string;
+  username: string;
+  avatar?: string | null;
+  id?: string;
 }
 
-export interface UserCreate extends UserBase {
-  password: string;
+export interface UserDataProps {
+  username: string;
+  email: string;
+  avatar?: any;
 }
 
-export interface User extends UserBase {
-  id: number;
-  is_active: boolean;
-}
+export type AuthContextProps = {
+  token: string | null;
+  user: UserProps | null;
+  signIn: (email: string, password: string) => Promise<void>;
+  signUp: (
+    email: string,
+    password: string,
+    username: string,
+    avatar?: string
+  ) => Promise<void>;
+  signOut: () => Promise<void>;
+  updateToken: (token: string) => Promise<void>;
+};
 
-export interface AuthToken {
-  access_token: string;
-  token_type: string;
+export interface DecodedTokenProps {
+  user: UserProps;
+  exp: number;
+  iat: number;
 }
