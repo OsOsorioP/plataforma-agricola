@@ -1,35 +1,31 @@
-// app/(tabs)/_layout.tsx
 import { Tabs } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useAuth } from '@/context/AuthContext';
-import { Button } from 'react-native';
+import { colors } from '@/constants/theme';
+import { verticalScale } from '@/utils/styling';
 
 export default function TabLayout() {
-    const { logout } = useAuth(); 
 
     return (
         <Tabs
             screenOptions={{
-                tabBarActiveTintColor: '#ffd33d',
+                tabBarActiveTintColor: colors.primary,
                 headerStyle: {
-                    backgroundColor: '#25292e',
+                    backgroundColor: colors.black,
                 },
                 headerShadowVisible: false,
                 headerTintColor: '#fff',
                 tabBarStyle: {
-                    backgroundColor: '#25292e',
+                    backgroundColor: '#ffffff',
                 },
+                headerShown: false
             }}
         >
             <Tabs.Screen
-                name="index"
+                name="chat"
                 options={{
                     title: 'Chat',
                     tabBarIcon: ({ color, focused }) => (
-                        <Ionicons name={focused ? 'chatbox-sharp' : 'chatbox-outline'} color={color} size={24} />
-                    ),
-                    headerRight: () => (
-                        <Button onPress={logout} title="Salir" color="#fff" />
+                        <Ionicons name={focused ? 'chatbox-sharp' : 'chatbox-outline'} color={color} size={verticalScale(24)} />
                     ),
                 }}
             />
@@ -39,25 +35,8 @@ export default function TabLayout() {
                 options={{
                     title: 'Parcelas',
                     tabBarIcon: ({ color, focused }) => (
-                        <Ionicons name={focused ? 'map-sharp' : 'map-outline'} color={color} size={24} />
+                        <Ionicons name={focused ? 'map-sharp' : 'map-outline'} color={color} size={verticalScale(24)} />
                     ),
-                    headerRight: () => (
-                        <Button onPress={logout} title="Salir" color="#fff" />
-                    ),
-                }}
-            />
-
-            <Tabs.Screen
-                name="alerts"
-                options={{
-                    title: 'Alertas',
-                    tabBarIcon: ({ color, focused }) => (
-                        <Ionicons name={focused ? 'map-sharp' : 'map-outline'} color={color} size={24} />
-                    ),
-                    headerRight: () => (
-                        <Button onPress={logout} title="Salir" color="#fff" />
-                    ),
-                    
                 }}
             />
         </Tabs>
