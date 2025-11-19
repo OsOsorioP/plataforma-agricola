@@ -1,31 +1,31 @@
-from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, AIMessage
-from app.core.config import GOOGLE_API_KEY
 from app.agents.graph_builder import agent_graph
 from app.db import db_models
 from app.db.database import SessionLocal
 
 from typing import Optional
 
-from sqlalchemy.orm import Session
-
-def save_chat_message(user_id: int, message_text: str, sender_type: str):
+def save_chat_message(user_id: int, content: str, sender_type: str, attachement: Optional[str] = None):
     """Esta funcion guarda el chat history a la base de datos.
 
     Args:
         user_id (int): El ID del usuario
-        message_text (str): El mensaje o texto del usuario o ia
+        content (str): El mensaje o texto del usuario o ia
         sender_type (str): El tipo de remitente user o ai
+        attachement (str): La imagen en base64
     """
     db = SessionLocal()
     try:
         db_message = db_models.ChatMessage(
             user_id=user_id,
-            message=message_text,
-            sender_type=sender_type
+            content=content,
+            sender_type=sender_type,
+            attachement=attachement
         )
         db.add(db_message)
         db.commit()
+        db.refresh(db_message)
+        return db_message
     finally:
         db.close()
 
@@ -49,14 +49,61 @@ def load_chat_history(user_id: int):
         history = []
         for msg in db_messages:
             if msg.sender_type == 'user':
-                history.append(HumanMessage(content=msg.message))
+                history.append(HumanMessage(content=msg.content))
             else:
-                history.append(AIMessage(content=msg.message))
+                history.append(AIMessage(content=msg.content))
         return history
     finally:
         db.close()
         
-async def run_agent_graph(user_id: int, user_query: str, image_base64: Optional[str] = None) -> str:
+def load_chat_history_api(user_id: int):
+    """
+    Carga el historial de chat para la API. 
+    Si no hay mensajes, inserta el mensaje de bienvenida y lo devuelve.
+    """
+    db = SessionLocal()
+    try:
+        message_count = db.query(db_models.ChatMessage)\
+            .filter(db_models.ChatMessage.user_id == user_id).count()
+        
+        if message_count == 0:
+            welcome_message = { 
+                "content": "¡Hola! Soy tu asistente Agrosmi. ¿En qué puedo ayudarte hoy?", 
+                "sender_type": "ai"
+            }
+            
+            db_welcome_message = db_models.ChatMessage(
+                user_id=user_id,
+                content=welcome_message["content"],
+                sender_type=welcome_message["sender_type"],
+            )
+            db.add(db_welcome_message)
+            db.commit()
+            db.refresh(db_welcome_message)
+            
+            db_messages = [db_welcome_message]
+        else:
+            db_messages = db.query(db_models.ChatMessage)\
+                .filter(db_models.ChatMessage.user_id == user_id)\
+                    .order_by(db_models.ChatMessage.timestamp.desc())\
+                        .limit(10).all()
+            db_messages.reverse()
+        
+        history = []
+        for msg in db_messages:
+            is_me = msg.sender_type == 'user'
+            history.append({
+                "id": msg.id, 
+                "content": msg.content, 
+                "sender": msg.sender_type, 
+                "isMe": is_me,
+                "attachement": msg.attachement
+            })
+        return history
+    finally:
+        db.close()
+        
+async def run_agent_graph(user_id: dict, user_query: str, image_base64: Optional[str] = None) -> str:
     """
     Ejecuta el grafo de agentes con la consulta del usuario.
     
@@ -71,43 +118,23 @@ async def run_agent_graph(user_id: int, user_query: str, image_base64: Optional[
         chat_history = load_chat_history(user_id=user_id)
         
         initial_state = {
-            "user_id": user_id,
-            "user_query": user_query,
-            "chat_history": chat_history,
-            "recommendation_draft": "",
-            "agent_response": "",
+            "messages": chat_history + [HumanMessage(content=user_query)],
+            "user_info": {"id":user_id,"username":""},
             "image_base64": image_base64,
+            "reasoning": None,
+            "info_next_agent": None,
+            "agent_history": [],
         }
         
         final_state = await  agent_graph.ainvoke(initial_state)
-        final_response = final_state.get("agent_response", "No se pudo obtener una respuesta.")
+        final_response_message = next((msg for msg in reversed(final_state["messages"]) if isinstance(msg, AIMessage)), None)
+        final_response = final_response_message.content if final_response_message else "No se pudo generar una respuesta."
         
-        save_chat_message(user_id, user_query, 'user')
-        save_chat_message(user_id, final_response, 'ai')
+        save_chat_message(user_id, user_query, 'user', image_base64)
+        save_chat_message(user_id, final_response, 'ai', None)
         
-        return final_response
+        return load_chat_history_api(user_id=user_id)
         
     except Exception as e:
         print(f"Error al ejecutar el grafo de agentes: {e}")
         return "Lo siento, he tenido un problema para procesar tu solicitud a través del sistema de agentes."
-
-async def get_ai_response(user_query: str) -> str:
-    """
-    Función simple para obtener una respuesta de Gemini a una consulta.
-    
-    Args:
-        user_query (str): La pregunta o mensaje del usuario
-        
-    Returns:
-        content (str | list[str | dict]): respuesta de la ia
-    """
-    try:
-        llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash-exp", temperature=0, google_api_key=GOOGLE_API_KEY)
-        
-        response = await llm.invoke(user_query)
-        
-        return response.content
-        
-    except Exception as e:
-        print(f"Error al interactuar con la API de Gemini: {e}")
-        return "Lo siento, he tenido un problema para procesar tu solicitud."
