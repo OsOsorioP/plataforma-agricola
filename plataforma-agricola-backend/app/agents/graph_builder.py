@@ -1,7 +1,7 @@
 import os
-from langgraph.graph import StateGraph, END, START
+from langgraph.graph import StateGraph, END
+
 from app.agents.graph_state import GraphState
-from app.agents.agent_router import router_node
 from app.agents.agent_nodes import (
     general_tool_agent_node,
     production_agent_node,
@@ -10,7 +10,8 @@ from app.agents.agent_nodes import (
     sustainability_agent_node,
     risk_agent_node,
     vision_agent_node,
-    supervisor_agent_node
+    supervisor_agent_node,
+    kpi_agent_node
 )
 
 workflow = StateGraph(GraphState)
@@ -24,35 +25,37 @@ workflow.add_node("supply_chain_agent", supply_chain_agent_node)
 workflow.add_node("risk_agent", risk_agent_node)
 workflow.add_node("vision_agent", vision_agent_node)
 workflow.add_node("sustainability_agent", sustainability_agent_node)
+workflow.add_node("kpi_agent", kpi_agent_node)
 
 # Punto de entrada
-workflow.add_edge(START, "supervisor_agent")
+workflow.set_entry_point("supervisor_agent")
 
 # Aristas condicionales
 workflow.add_conditional_edges(
     "supervisor_agent",
-    router_node,
+    lambda state: state["next"],
     {
+        "general": "general_agent",
         "production": "production_agent",
         "water": "water_agent",
         "supply_chain": "supply_chain_agent",
         "risk": "risk_agent",
-        "general": "general_agent",
         "sustainability": "sustainability_agent",
         "vision": "vision_agent",
-        "end": END
+        "kpi": "kpi_agent",
+        "FINISH": END
     }
 )
 
 # Nodos especializados para terminar el flujo de trabajo
-workflow.add_edge("vision_agent", "production_agent")
-workflow.add_edge("production_agent", "sustainability_agent")
-workflow.add_edge("sustainability_agent", END)
-
-workflow.add_edge("general_agent", END)
-workflow.add_edge("water_agent", END)
-workflow.add_edge("supply_chain_agent", END)
-workflow.add_edge("risk_agent", END)
+workflow.add_edge("general_agent", "supervisor_agent")
+workflow.add_edge("production_agent", "supervisor_agent")
+workflow.add_edge("risk_agent", "supervisor_agent")
+workflow.add_edge("supply_chain_agent", "supervisor_agent")
+workflow.add_edge("sustainability_agent", "supervisor_agent")
+workflow.add_edge("vision_agent", "supervisor_agent")
+workflow.add_edge("water_agent", "supervisor_agent")
+workflow.add_edge("kpi_agent", "supervisor_agent")
 
 # Se compila el grafo
 agent_graph = workflow.compile()
