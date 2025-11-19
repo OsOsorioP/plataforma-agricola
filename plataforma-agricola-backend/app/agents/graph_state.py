@@ -1,32 +1,25 @@
-from typing import TypedDict, Optional, List
+from typing import Dict, TypedDict, Annotated, List, Optional
 from langgraph.graph.message import add_messages
 from langchain_core.messages import BaseMessage
 
 class GraphState(TypedDict):
     """
     Representa el estado de nuestro grafo de agentes.
-    
+
     Atributos:
-        user_id: ID del usuario actual.
-        user_query: La consulta de texto del usuario.
-        image_base64: La ruta local de la imagen enviada por el usuario (NUEVO).
+        messages: La lista de mensajes que componen la conversación.
+                  LangGraph se encargará de añadir nuevos mensajes a esta lista.
         chat_history: Lista de mensajes en el historial de chat.
-        next_agent: El agente especializado elegido por el supervisor
-        recommendation_draft: Borrador de la recomendación del agente.
-        agent_response: La respuesta final del agente.
-        # Aquí se van añadir más campos a futuro.
-        # parcel_id: ID de la parcelas para el contexto
-        diagnosis: Diagnóstico de una enfermedad.
-        # recommendations: Lista de recomendaciones.
-        treatment_plan: Plan del agente de producción
+        user_id: El ID del usuario que inició la conversación.
+        image_base64: La imagen opcional enviada por el usuario.
+        reasoning: Razonamiento del supervisor
+        info_next_agent: Información para el siguiente agente.
+        agent_history: Historial de los agentes usados por el supervisor.
     """
-    user_id: int
-    user_query: str
+    messages: Annotated[List[BaseMessage], add_messages]
     chat_history: List[BaseMessage]
-    next_agent: str
-    recommendation_draft: str
-    agent_response: str
+    user_info: Dict
     image_base64: Optional[str]
-    diagnosis: Optional[str]
-    treatment_plan: Optional[str]
-    
+    reasoning: Optional[str]
+    info_next_agent: Optional[str]
+    agent_history: List[str]
