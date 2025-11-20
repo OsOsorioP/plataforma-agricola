@@ -24,7 +24,7 @@ def get_parcel_details(parcel_id: int)->str:
         parcel = db.query(db_models.Parcel).filter(db_models.Parcel.id == parcel_id).first()
         if not parcel:
             return f'No se encontró ninguna parcela con el ID {parcel_id}.'
-        return f'Detalles de la Parcela ID {parcel.id}: Nombre: {parcel.name}, Ubicación: {parcel.location}, Área: {parcel.area} hectáreas.'
+        return f'Detalles de la Parcela ID {parcel.id}: Nombre: {parcel.name}, Coordenadas: {parcel.location}, Área: {parcel.area} hectáreas, GeoJSON: {parcel.geometry}'
     finally:
         db.close()
         
@@ -152,7 +152,216 @@ def get_kpi_summary(parcel_id: int, kpi_name: str) -> str:
         return summary
     finally:
         db.close()      
+       
+@tool
+def lookup_parcel_by_name(name_query: str, user_id: int) -> str:
+    """
+    Útil para encontrar el ID y la ubicación de una parcela buscando por su nombre (o parte del nombre).
+    Requiere el nombre aproximado (ej. 'Lote Tesis') y el ID del usuario propietario.
+    Devuelve los detalles técnicos necesarios para otras herramientas.
+    """
+    db = SessionLocal()
+    try:
+        # Búsqueda insensible a mayúsculas/minúsculas y parcial
+        parcel = db.query(db_models.Parcel).filter(
+            db_models.Parcel.owner_id == user_id,
+            db_models.Parcel.name.ilike(f"%{name_query}%")
+        ).first()
         
+        if not parcel:
+            return f"No se encontró ninguna parcela que contenga el nombre '{name_query}' para el usuario {user_id}."
+        
+        # Devolvemos un JSON string con todo lo que los agentes necesitan
+        return json.dumps({
+            "found": True,
+            "id": parcel.id,
+            "name": parcel.name,
+            "location": parcel.location, # Coordenadas
+            "area": parcel.area
+        })
+    except Exception as e:
+        return f"Error al buscar la parcela: {e}"
+    finally:
+        db.close()
+     
+     
+@tool
+def calculate_water_requirements(parcel_id: int, crop_type: str, growth_stage: str) -> str:
+    """
+    Calcula los requerimientos hídricos estimados para un cultivo específico.
+    Parámetros:
+    - parcel_id: ID de la parcela
+    - crop_type: Tipo de cultivo (ej. 'maiz', 'cafe', 'arroz', 'papa')
+    - growth_stage: Etapa fenológica ('inicial', 'desarrollo', 'maduracion', 'cosecha')
+    
+    Devuelve estimación de litros/día necesarios y recomendaciones de riego.
+    """
+    # Coeficientes Kc aproximados por cultivo y etapa
+    kc_values = {
+        'maiz': {'inicial': 0.3, 'desarrollo': 0.7, 'maduracion': 1.2, 'cosecha': 0.6},
+        'cafe': {'inicial': 0.9, 'desarrollo': 0.95, 'maduracion': 0.95, 'cosecha': 0.95},
+        'arroz': {'inicial': 1.05, 'desarrollo': 1.1, 'maduracion': 1.2, 'cosecha': 0.9},
+        'papa': {'inicial': 0.5, 'desarrollo': 0.75, 'maduracion': 1.15, 'cosecha': 0.75},
+    }
+    
+    db = SessionLocal()
+    try:
+        parcel = db.query(db_models.Parcel).filter(db_models.Parcel.id == parcel_id).first()
+        if not parcel:
+            return f"Error: No se encontró la parcela con ID {parcel_id}."
+        
+        # Obtener clima actual para calcular ETo (método simplificado)
+        weather = get_weather_forecast(parcel.location)
+        
+        crop_lower = crop_type.lower()
+        stage_lower = growth_stage.lower()
+        
+        if crop_lower not in kc_values:
+            available_crops = ', '.join(kc_values.keys())
+            return f"Error: Cultivo '{crop_type}' no reconocido. Cultivos disponibles: {available_crops}"
+        
+        if stage_lower not in kc_values[crop_lower]:
+            return f"Error: Etapa '{growth_stage}' no válida. Usa: inicial, desarrollo, maduracion, cosecha"
+        
+        kc = kc_values[crop_lower][stage_lower]
+        
+        # ETo simplificado (valor promedio para Colombia: 3-5 mm/día)
+        eto_estimated = 4.0  # mm/día
+        
+        # ETc = ETo × Kc
+        etc = eto_estimated * kc
+        
+        # Convertir a litros por área de la parcela
+        area_m2 = parcel.area  # Asumiendo que está en m²
+        water_liters_day = etc * area_m2
+        
+        return json.dumps({
+            "parcel_id": parcel_id,
+            "parcel_name": parcel.name,
+            "area_m2": area_m2,
+            "crop_type": crop_type,
+            "growth_stage": growth_stage,
+            "kc_coefficient": kc,
+            "etc_mm_day": f"{etc:.2f}",
+            "estimated_water_liters_day": f"{water_liters_day:.2f}",
+            "recommendation": f"Se recomienda aplicar aproximadamente {water_liters_day:.0f} litros de agua por día, o {water_liters_day*7:.0f} litros por semana."
+        })
+        
+    except Exception as e:
+        return f"Error al calcular requerimientos hídricos: {e}"
+    finally:
+        db.close()
+     
+@tool
+def get_precipitation_data(parcel_id: int, days_back: int = 7) -> str:
+    """
+    Obtiene datos históricos de precipitación para una parcela específica.
+    Parámetros:
+    - parcel_id: ID de la parcela
+    - days_back: Número de días hacia atrás a consultar (por defecto 7)
+    
+    Devuelve acumulado de lluvia y datos diarios.
+    """
+    db = SessionLocal()
+    try:
+        parcel = db.query(db_models.Parcel).filter(db_models.Parcel.id == parcel_id).first()
+        if not parcel:
+            return f"Error: No se encontró la parcela con ID {parcel_id}."
+        
+        # Extraer coordenadas
+        coords = parcel.location.split(',')
+        lat, lon = float(coords[0]), float(coords[1])
+        
+        # API de Open-Meteo para datos históricos (gratuita)
+        end_date = datetime.now().date()
+        start_date = end_date - timedelta(days=days_back)
+        
+        url = "https://api.open-meteo.com/v1/forecast"
+        params = {
+            "latitude": lat,
+            "longitude": lon,
+            "daily": "precipitation_sum",
+            "start_date": start_date.isoformat(),
+            "end_date": end_date.isoformat(),
+            "timezone": "America/Bogota"
+        }
+        
+        response = requests.get(url, params=params)
+        response.raise_for_status()
+        data = response.json()
+        
+        precipitation_data = data['daily']['precipitation_sum']
+        dates = data['daily']['time']
+        
+        total_precipitation = sum(precipitation_data)
+        
+        daily_details = [
+            f"{date}: {precip:.1f} mm" 
+            for date, precip in zip(dates, precipitation_data)
+        ]
+        
+        return json.dumps({
+            "parcel_id": parcel_id,
+            "period": f"{start_date} a {end_date}",
+            "total_precipitation_mm": f"{total_precipitation:.2f}",
+            "daily_data": daily_details,
+            "interpretation": "Suficiente" if total_precipitation > 25 else "Insuficiente - considerar riego suplementario"
+        })
+        
+    except Exception as e:
+        return f"Error al obtener datos de precipitación: {e}"
+    finally:
+        db.close()
+ 
+@tool
+def estimate_soil_moisture_deficit(parcel_id: int, crop_type: str, days_since_rain: int) -> str:
+    """
+    Estima el déficit de humedad del suelo basado en días sin lluvia y tipo de cultivo.
+    Útil para determinar urgencia de riego cuando no hay sensores disponibles.
+    
+    Parámetros:
+    - parcel_id: ID de la parcela
+    - crop_type: Tipo de cultivo
+    - days_since_rain: Días desde la última lluvia significativa
+    
+    Devuelve nivel de estrés hídrico estimado.
+    """
+    # Tasas de depleción por tipo de suelo (mm/día sin lluvia)
+    depletion_rates = {
+        'maiz': 5.0,
+        'cafe': 3.5,
+        'arroz': 7.0,
+        'papa': 4.5,
+        'default': 4.0
+    }
+    
+    rate = depletion_rates.get(crop_type.lower(), depletion_rates['default'])
+    estimated_deficit = rate * days_since_rain
+    
+    # Umbrales de estrés
+    if estimated_deficit < 20:
+        stress_level = "Bajo"
+        action = "Monitorear condiciones"
+    elif estimated_deficit < 40:
+        stress_level = "Moderado"
+        action = "Considerar riego en 1-2 días"
+    elif estimated_deficit < 60:
+        stress_level = "Alto"
+        action = "Riego recomendado en las próximas 24 horas"
+    else:
+        stress_level = "Crítico"
+        action = "Riego urgente requerido"
+    
+    return json.dumps({
+        "parcel_id": parcel_id,
+        "crop_type": crop_type,
+        "days_since_rain": days_since_rain,
+        "estimated_deficit_mm": f"{estimated_deficit:.1f}",
+        "stress_level": stress_level,
+        "recommended_action": action
+    })
+ 
+ 
 # Herramienta rag
 retriever = get_retriever()
 knowledge_base_tool = create_retriever_tool(
@@ -163,40 +372,58 @@ knowledge_base_tool = create_retriever_tool(
 
 # Herramientas api
 @tool
-def get_weather_forecast(location:str)->str:
+def get_weather_forecast(location: str) -> str:
     """
-    Útil para obtener el pronóstico del tiempo para una ubicación específica.
-    La ubicación debe ser en formato 'ciudad,código_país' (ej. 'Bogota,CO').
-    Devuelve un resumen del clima actual y el pronóstico para las próximas horas.
+    Útil para obtener el pronóstico del tiempo.
+    Acepta dos formatos de ubicación:
+    1. Nombre de ciudad: 'Bogota,CO'
+    2. Coordenadas (Latitud,Longitud): '4.65,-74.05' (Formato preferido para parcelas).
+    Devuelve un resumen del clima actual.
     """
     base_url = "http://api.openweathermap.org/data/2.5/weather"
     params = {
-        "q": location,
         "appid": OPENWEATHER_API_KEY,
-        "units": "metric", # Para obtener la temperatura en Celsius
-        "lang": "es"      # Para obtener las descripciones en español
+        "units": "metric",
+        "lang": "es"
     }
-    
+
+    # Lógica para detectar si es coordenada o ciudad
+    try:
+        # Intentamos dividir por coma y convertir a float para ver si son coordenadas
+        if "," in location:
+            parts = location.split(",")
+            # Verificamos si ambas partes son números
+            lat = float(parts[0].strip())
+            lon = float(parts[1].strip())
+            
+            # Si llegamos aquí, son coordenadas válidas
+            params["lat"] = lat
+            params["lon"] = lon
+        else:
+            # Si falla la conversión o no tiene coma, asumimos que es nombre de ciudad
+            params["q"] = location
+    except ValueError:
+        # Si hay coma pero no son números (ej: "Bogota,CO"), es nombre de ciudad
+        params["q"] = location
+
     try:
         response = requests.get(base_url, params=params)
-        response.raise_for_status() 
+        response.raise_for_status()
         data = response.json()
         
         summary = (
-            f"Pronóstico del tiempo para {data['name']}:\n"
-            f"- Condición actual: {data['weather'][0]['description']}\n"
-            f"- Temperatura: {data['main']['temp']}°C (Sensación real: {data['main']['feels_like']}°C)\n"
+            f"Reporte del tiempo para {data.get('name', 'la ubicación seleccionada')}:\n"
+            f"- Condición: {data['weather'][0]['description']}\n"
+            f"- Temperatura: {data['main']['temp']}°C\n"
             f"- Humedad: {data['main']['humidity']}%\n"
             f"- Viento: {data['wind']['speed']} m/s\n"
         )
         
         return summary
     except requests.exceptions.HTTPError as http_err:
-        if response.status_code == 404:
-            return f"Error: No se pudo encontrar la ubicación '{location}'. Por favor, verifica el formato (ej. 'Bogota,CO')."
-        return f"Error HTTP al obtener el pronóstico: {http_err}"
+        return f"Error al obtener el clima: {http_err}. Verifica que la ubicación '{location}' sea correcta."
     except Exception as e:
-        return f"Ocurrió un error inesperado al obtener el pronóstico: {e}"
+        return f"Error inesperado: {e}"
     
 @tool
 def get_market_price(product_name: str) -> str:
