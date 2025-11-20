@@ -11,6 +11,8 @@ export default function TabLayout() {
                 tabBarActiveTintColor: colors.primary,
                 headerStyle: {
                     backgroundColor: colors.black,
+                    height: verticalScale(60),
+                    paddingBottom: verticalScale(5)
                 },
                 headerShadowVisible: false,
                 headerTintColor: '#fff',
@@ -20,10 +22,20 @@ export default function TabLayout() {
                 headerShown: false
             }}
         >
+
+            <Tabs.Screen
+                name="dashboard"
+                options={{
+                    title: 'Inicio',
+                    tabBarIcon: ({ color, focused }) => (
+                        <Ionicons name={focused ? 'grid' : 'grid-outline'} color={color} size={verticalScale(24)} />
+                    ),
+                }}
+            />
             <Tabs.Screen
                 name="chat"
                 options={{
-                    title: 'Chat',
+                    title: 'Asistente',
                     tabBarIcon: ({ color, focused }) => (
                         <Ionicons name={focused ? 'chatbox-sharp' : 'chatbox-outline'} color={color} size={verticalScale(24)} />
                     ),
