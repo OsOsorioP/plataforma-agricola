@@ -3,12 +3,12 @@ from sqlalchemy.orm import Session
 from app.db import db_models
 from app.db.database import get_db
 from app.auth import create_access_token, verify_password, get_password_hash
-from app.models.user import UserBase, UserCreate
+from app.models.user import UserLogin, UserCreate
 
 router = APIRouter()
 
 @router.post("/login")
-def login_for_access_token(user_data: UserBase, db: Session = Depends(get_db)):
+def login_for_access_token(user_data: UserLogin, db: Session = Depends(get_db)):
     user = db.query(db_models.User).filter(db_models.User.email == user_data.email).first()
     if not user or not verify_password(user_data.password, user.hashed_password):
         raise HTTPException(
