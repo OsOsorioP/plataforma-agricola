@@ -1,50 +1,86 @@
-import { StyleSheet, View, ScrollView, RefreshControl, FlatList } from 'react-native'
+import { StyleSheet, View, ScrollView, RefreshControl, TouchableOpacity } from 'react-native'
 import React, { useEffect, useState } from 'react'
 import ScreenWrapper from '@/components/layout/ScreenWrapper'
 import Header from '@/components/layout/Header'
 import Typo from '@/components/ui/Typo'
 import { colors, spacingX, spacingY } from '@/constants/theme'
 import { useAuth } from '@/context/AuthContext'
-import { getMyAlerts, getKPIHistory } from '@/services/dashboardService'
+import { getMyAlerts, getKPIHistory } from '@/services/dashboardService' // Ya no importamos syncSatelliteData
 import { Alert, KPIMetric } from '@/types/dashboard'
 import { getParcels } from '@/services/parcelService'
+import { Parcel } from '@/types/parcels'
 import AlertCard from '@/components/dashboard/AlertCard'
 import Loading from '@/components/ui/Loading'
 import KPIGraph from '@/components/dashboard/KPIGraph';
-
-import { verticalScale } from '@/utils/styling'
+import { scale } from '@/utils/styling'
 
 export default function DashboardScreen() {
     const { user } = useAuth()
     const [alerts, setAlerts] = useState<Alert[]>([])
-    const [kpiData, setKpiData] = useState<KPIMetric[]>([])
+    const [parcels, setParcels] = useState<Parcel[]>([])
+    
+    const [selectedParcel, setSelectedParcel] = useState<Parcel | null>(null)
+    
+    const [kpiDataNDVI, setKpiDataNDVI] = useState<KPIMetric[]>([])
+    const [kpiDataWater, setKpiDataWater] = useState<KPIMetric[]>([])
+    
     const [loading, setLoading] = useState(true)
+    const [graphLoading, setGraphLoading] = useState(false)
     const [refreshing, setRefreshing] = useState(false)
 
-    const loadData = async () => {
+    const loadInitialData = async () => {
         try {
-            const alertsData = await getMyAlerts()
-            setAlerts(alertsData)
-            const parcels = await getParcels();
-            if (parcels.length > 0) {
-                const history = await getKPIHistory(parcels[0].id);
-                setKpiData(history);
+            const [alertsData, parcelsData] = await Promise.all([
+                getMyAlerts(),
+                getParcels()
+            ]);
+            
+            setAlerts(alertsData);
+            setParcels(parcelsData);
+
+            if (parcelsData.length > 0 && !selectedParcel) {
+                setSelectedParcel(parcelsData[0]);
             }
         } catch (error) {
-            console.error(error)
+            console.error(error);
         } finally {
-            setLoading(false)
-            setRefreshing(false)
+            setLoading(false);
+            setRefreshing(false);
         }
     }
 
     useEffect(() => {
-        loadData()
-    }, [])
+        const loadKPIs = async () => {
+            if (!selectedParcel) return;
+            
+            setGraphLoading(true);
+            try {
+                const ndvi = await getKPIHistory(selectedParcel.id, 'SOIL_HEALTH_NDVI');
+                const water = await getKPIHistory(selectedParcel.id, 'WATER_EFFICIENCY');
+                setKpiDataNDVI(ndvi);
+                setKpiDataWater(water);
+            } catch (error) {
+                console.error("Error cargando KPIs", error);
+            } finally {
+                setGraphLoading(false);
+            }
+        };
+
+        loadKPIs();
+    }, [selectedParcel]); 
+
+    useEffect(() => {
+        loadInitialData();
+    }, []);
 
     const onRefresh = () => {
-        setRefreshing(true)
-        loadData()
+        setRefreshing(true);
+        loadInitialData();
+        if (selectedParcel) {
+            const current = selectedParcel;
+            setSelectedParcel(null); 
+            setTimeout(() => setSelectedParcel(current), 10);
+        }
     }
 
     return (
@@ -60,62 +96,64 @@ export default function DashboardScreen() {
                     refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
                 >
                     <View style={styles.section}>
-                        <Typo size={20} fontWeight="700" style={{ marginBottom: spacingY._15 }}>
-                            Estado de tus Cultivos
-                        </Typo>
-                        <View style={styles.statsRow}>
-                            <View style={[styles.statCard, { backgroundColor: '#dcfce7' }]}>
-                                <Typo size={24} fontWeight="bold" color="#166534">OK</Typo>
-                                <Typo size={12} color="#166534">Salud General</Typo>
-                            </View>
-                            <View style={[styles.statCard, { backgroundColor: '#e0f2fe' }]}>
-                                <Typo size={24} fontWeight="bold" color="#075985">{alerts.length}</Typo>
-                                <Typo size={12} color="#075985">Alertas Activas</Typo>
-                            </View>
-                            <View style={[styles.statCard, { backgroundColor: '#fef9c3' }]}>
-                                <Typo size={24} fontWeight="bold" color="#854d0e">--</Typo>
-                                <Typo size={12} color="#854d0e">Cosecha Est.</Typo>
-                            </View>
-                        </View>
-                    </View>
-
-                    <View style={styles.section}>
                         <Typo size={18} fontWeight="600" style={{ marginBottom: spacingY._10 }}>
-                            Alertas y Riesgos
+                            Alertas Activas
                         </Typo>
-
-                        {loading ? (
-                            <Loading />
-                        ) : alerts.length === 0 ? (
+                        {loading ? <Loading /> : alerts.length === 0 ? (
                             <View style={styles.emptyState}>
-                                <Typo color={colors.neutral400}>No tienes alertas pendientes.</Typo>
+                                <Typo color={colors.neutral400}>Sin alertas pendientes.</Typo>
                             </View>
                         ) : (
-                            alerts.map(alert => (
-                                <AlertCard key={alert.id} alert={alert} />
-                            ))
+                            alerts.map(alert => <AlertCard key={alert.id} alert={alert} />)
                         )}
                     </View>
 
                     <View style={styles.section}>
                         <Typo size={18} fontWeight="600" style={{ marginBottom: spacingY._10 }}>
-                            Evolución de Sostenibilidad
+                            Monitoreo Satelital
                         </Typo>
 
-                        <KPIGraph
-                            title="Salud del Suelo (NDVI)"
-                            data={kpiData.filter(d => d.kpi_name === 'SOIL_HEALTH_NDVI')}
-                            color={colors.green}
-                        />
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{marginBottom: 15}}>
+                            {parcels.map((p) => (
+                                <TouchableOpacity 
+                                    key={p.id}
+                                    style={[
+                                        styles.parcelChip, 
+                                        selectedParcel?.id === p.id && styles.parcelChipSelected
+                                    ]}
+                                    onPress={() => setSelectedParcel(p)}
+                                >
+                                    <Typo 
+                                        size={13} 
+                                        fontWeight={selectedParcel?.id === p.id ? "600" : "400"}
+                                        color={selectedParcel?.id === p.id ? colors.white : colors.text}
+                                    >
+                                        {p.name}
+                                    </Typo>
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
 
-
-                        <KPIGraph
-                            title="Eficiencia Hídrica"
-                            data={kpiData.filter(d => d.kpi_name === 'WATER_EFFICIENCY')}
-                            color={colors.primary}
-                        />
+                        {graphLoading ? (
+                            <View style={{height: 200, justifyContent:'center'}}><Loading /></View>
+                        ) : (
+                            <>
+                                <KPIGraph
+                                    title="Salud del Cultivo (NDVI)"
+                                    data={kpiDataNDVI}
+                                    color={colors.green}
+                                />
+                                <KPIGraph
+                                    title="Eficiencia Hídrica (NDWI)"
+                                    data={kpiDataWater}
+                                    color={colors.primary}
+                                />
+                                <Typo size={12} color={colors.neutral400} style={{textAlign:'center', marginTop: 10}}>
+                                    Datos generados automáticamente por el Asistente IA.
+                                </Typo>
+                            </>
+                        )}
                     </View>
-
                 </ScrollView>
             </View>
         </ScreenWrapper>
@@ -131,26 +169,26 @@ const styles = StyleSheet.create({
     section: {
         marginBottom: spacingY._25
     },
-    statsRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        gap: spacingX._10
-    },
-    statCard: {
-        flex: 1,
-        padding: spacingY._15,
-        borderRadius: 20,
-        alignItems: 'center',
-        justifyContent: 'center',
-        borderCurve: 'continuous'
-    },
     emptyState: {
         padding: spacingY._20,
         backgroundColor: colors.white,
-        borderRadius: 15,
+        borderRadius: scale(15),
         alignItems: 'center',
         borderStyle: 'dashed',
         borderWidth: 1,
         borderColor: colors.neutral300
+    },
+    parcelChip: {
+        paddingVertical: 8,
+        paddingHorizontal: 16,
+        backgroundColor: colors.neutral100,
+        borderRadius: scale(10),
+        marginRight: 10,
+        borderWidth: 1,
+        borderColor: colors.neutral200
+    },
+    parcelChipSelected: {
+        backgroundColor: colors.black,
+        borderColor: colors.black
     }
 })
