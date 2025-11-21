@@ -1,5 +1,5 @@
 from typing import Optional
-from langchain.tools import tool
+from langchain.tools import tool, ToolRuntime
 from langchain_classic.tools.retriever import create_retriever_tool
 
 from app.services.rag_service import get_retriever
@@ -61,11 +61,14 @@ def get_parcel_details(parcel_id: int) -> str:
 
 
 @tool
-def list_user_parcels(user_id: int) -> str:
+def list_user_parcels(user_id: int, runtime: ToolRuntime) -> str:
     """
     Lista todas las parcelas de un usuario.
     Devuelve: lista con IDs, nombres, ubicaciones y áreas.
     """
+    runtime.state["user_id"]
+    print(f"\n--- prueba state tool: user_id {runtime} ---\n")
+
     db = SessionLocal()
     try:
         user = db.query(db_models.User).filter(
@@ -700,7 +703,8 @@ def estimate_soil_moisture_deficit(parcel_id: int, crop_type: str, days_since_ra
 @tool
 def get_parcel_health_indices(parcel_id: int, start_date: str, end_date: str) -> str:
     """
-    Obtiene índices de salud vegetal (NDVI) mediante datos satelitales.
+    Obtiene índices como NDVI mediante datos satelitales.
+    Y guarda los resultados clave como KPIs históricos.
 
     Parámetros:
     - parcel_id: ID de la parcela
@@ -716,7 +720,7 @@ def get_parcel_health_indices(parcel_id: int, start_date: str, end_date: str) ->
         except ValueError:
             return _safe_json_response(False,
                                        error="Fechas inválidas. Usar formato ISO: YYYY-MM-DD",
-                                       data={"example": "2024-01-15"})
+                                       data={"example": "2025-01-15"})
 
         # Validar rango temporal
         if date_from > date_to:
@@ -743,15 +747,36 @@ def get_parcel_health_indices(parcel_id: int, start_date: str, end_date: str) ->
 
         # Calcular NDVI
         ndvi_results = get_ndvi(parcel.geometry, start_date, end_date)
-        ndwi_results = get_ndwi()
-        evi_results = get_evi()
-        savi_results = get_savi()
-        msavi_results = get_msavi()
-        bsi_results = get_bsi()
-        nbr_results = get_nbr()
-        gci_results = get_gci()
-        lai_results = get_lai()
-        fapar_results = get_fapar()
+        ndwi_results = get_ndwi(parcel.geometry, start_date, end_date)
+        evi_results = get_evi(parcel.geometry, start_date, end_date)
+        savi_results = get_savi(parcel.geometry, start_date, end_date)
+        msavi_results = get_msavi(parcel.geometry, start_date, end_date)
+        bsi_results = get_bsi(parcel.geometry, start_date, end_date)
+        nbr_results = get_nbr(parcel.geometry, start_date, end_date)
+        gci_results = get_gci(parcel.geometry, start_date, end_date)
+        lai_results = get_lai(parcel.geometry, start_date, end_date)
+        fapar_results = get_fapar(parcel.geometry, start_date, end_date)
+
+        ndvi_mean = ndvi_results[1]['mean']
+        ndwi_mean = ndwi_results[1]['mean']
+
+        # Guardamos NDVI
+        kpi_ndvi = db_models.KPIMetric(
+            parcel_id=parcel.id,
+            kpi_name="SOIL_HEALTH_NDVI",
+            value=ndvi_mean
+        )
+        db.add(kpi_ndvi)
+
+        # Guardamos NDWI (Eficiencia Hídrica)
+        kpi_ndwi = db_models.KPIMetric(
+            parcel_id=parcel.id,
+            kpi_name="WATER_EFFICIENCY",
+            value=ndwi_mean
+        )
+        db.add(kpi_ndwi)
+
+        db.commit()
 
         return _safe_json_response(True, {
             "parcel_id": parcel_id,
