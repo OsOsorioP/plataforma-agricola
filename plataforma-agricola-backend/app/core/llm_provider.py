@@ -48,12 +48,11 @@ llm_production = ChatGroq(
     groq_api_key=GROQ_API_KEY
 )
 
-llm_sustainability = ChatGroq(
-    model="llama3-8b-8192",
-    temperature=0,
+llm_sustainability = ChatGoogleGenerativeAI(
+    model="gemini-2.5-flash",
+    temperature=0.3,  # Un poco de creatividad para soluciones alternativas
     google_api_key=GOOGLE_API_KEY
 )
-
 llm_kpi = ChatGroq(
     model_name="gemma-7b-it",
     temperature=0,
