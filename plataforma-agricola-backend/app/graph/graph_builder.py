@@ -4,7 +4,7 @@ from langgraph.graph import StateGraph, END
 from app.graph.graph_state import GraphState
 
 from app.agents import (supervisor_agent, supply_agent, sustainability_agent,
-                        production_agent, water_agent, vision_agent, kpi_agent, risk_agent)
+                        production_agent, water_agent, vision_agent, risk_agent)
 
 workflow = StateGraph(GraphState)
 
@@ -17,7 +17,6 @@ workflow.add_node("risk_agent", risk_agent.risk_agent_node)
 workflow.add_node("vision_agent", vision_agent.vision_agent_node)
 workflow.add_node("sustainability_agent",
                   sustainability_agent.sustainability_agent_node)
-workflow.add_node("kpi_agent", kpi_agent.kpi_agent_node)
 
 # Punto de entrada
 workflow.set_entry_point("supervisor_agent")
@@ -33,7 +32,6 @@ workflow.add_conditional_edges(
         "risk": "risk_agent",
         "sustainability": "sustainability_agent",
         "vision": "vision_agent",
-        "kpi": "kpi_agent",
         "FINISH": END
     }
 )
@@ -45,7 +43,6 @@ workflow.add_edge("supply_chain_agent", "supervisor_agent")
 workflow.add_edge("sustainability_agent", "supervisor_agent")
 workflow.add_edge("vision_agent", "supervisor_agent")
 workflow.add_edge("water_agent", "supervisor_agent")
-workflow.add_edge("kpi_agent", "supervisor_agent")
 
 # Se compila el grafo
 agent_graph = workflow.compile()
