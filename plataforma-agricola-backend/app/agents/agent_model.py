@@ -12,4 +12,4 @@ class SupervisorDecision(BaseModel):
         description="Razonamiento del supervisor para la decisión tomada."
     )
     info_for_next_agent: Optional[str] = Field(None, description="Información clave extraída para el próximo agente.")
-    content: str = Field(description="Salida del analisis a las respuestas recopiladas de todos los agentes, para entregar una respuesta completa y precisa al usuario.")
+    content: str = Field(description="Salida del analisis a las respuestas recopiladas de todos los agentes, para entregar una respuesta completa y precisa al usuario solo si next_agent es FINISH.")
