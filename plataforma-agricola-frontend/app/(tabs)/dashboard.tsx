@@ -5,15 +5,19 @@ import Header from '@/components/layout/Header'
 import Typo from '@/components/ui/Typo'
 import { colors, spacingX, spacingY } from '@/constants/theme'
 import { useAuth } from '@/context/AuthContext'
-import { getMyAlerts } from '@/services/dashboardService'
-import { Alert } from '@/types/dashboard'
+import { getMyAlerts, getKPIHistory } from '@/services/dashboardService'
+import { Alert, KPIMetric } from '@/types/dashboard'
+import { getParcels } from '@/services/parcelService'
 import AlertCard from '@/components/dashboard/AlertCard'
 import Loading from '@/components/ui/Loading'
+import KPIGraph from '@/components/dashboard/KPIGraph';
+
 import { verticalScale } from '@/utils/styling'
 
 export default function DashboardScreen() {
     const { user } = useAuth()
     const [alerts, setAlerts] = useState<Alert[]>([])
+    const [kpiData, setKpiData] = useState<KPIMetric[]>([])
     const [loading, setLoading] = useState(true)
     const [refreshing, setRefreshing] = useState(false)
 
@@ -21,6 +25,11 @@ export default function DashboardScreen() {
         try {
             const alertsData = await getMyAlerts()
             setAlerts(alertsData)
+            const parcels = await getParcels();
+            if (parcels.length > 0) {
+                const history = await getKPIHistory(parcels[0].id);
+                setKpiData(history);
+            }
         } catch (error) {
             console.error(error)
         } finally {
@@ -41,42 +50,40 @@ export default function DashboardScreen() {
     return (
         <ScreenWrapper showPattern={true} bgOpacity={0.1}>
             <View style={styles.container}>
-                <Header 
-                    title={`Hola, ${user?.username || 'Agricultor'}`} 
-                    style={{marginBottom: spacingY._20}}
+                <Header
+                    title={`Hola, ${user?.username || 'Agricultor'}`}
+                    style={{ marginBottom: spacingY._20 }}
                 />
 
-                <ScrollView 
+                <ScrollView
                     showsVerticalScrollIndicator={false}
                     refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
                 >
-                    {/* Sección de Resumen (KPIs Rápidos - Simulación Visual) */}
                     <View style={styles.section}>
-                        <Typo size={20} fontWeight="700" style={{marginBottom: spacingY._15}}>
+                        <Typo size={20} fontWeight="700" style={{ marginBottom: spacingY._15 }}>
                             Estado de tus Cultivos
                         </Typo>
                         <View style={styles.statsRow}>
-                            <View style={[styles.statCard, {backgroundColor: '#dcfce7'}]}>
+                            <View style={[styles.statCard, { backgroundColor: '#dcfce7' }]}>
                                 <Typo size={24} fontWeight="bold" color="#166534">OK</Typo>
                                 <Typo size={12} color="#166534">Salud General</Typo>
                             </View>
-                            <View style={[styles.statCard, {backgroundColor: '#e0f2fe'}]}>
+                            <View style={[styles.statCard, { backgroundColor: '#e0f2fe' }]}>
                                 <Typo size={24} fontWeight="bold" color="#075985">{alerts.length}</Typo>
                                 <Typo size={12} color="#075985">Alertas Activas</Typo>
                             </View>
-                            <View style={[styles.statCard, {backgroundColor: '#fef9c3'}]}>
+                            <View style={[styles.statCard, { backgroundColor: '#fef9c3' }]}>
                                 <Typo size={24} fontWeight="bold" color="#854d0e">--</Typo>
                                 <Typo size={12} color="#854d0e">Cosecha Est.</Typo>
                             </View>
                         </View>
                     </View>
 
-                    {/* Sección de Alertas */}
                     <View style={styles.section}>
-                        <Typo size={18} fontWeight="600" style={{marginBottom: spacingY._10}}>
+                        <Typo size={18} fontWeight="600" style={{ marginBottom: spacingY._10 }}>
                             Alertas y Riesgos
                         </Typo>
-                        
+
                         {loading ? (
                             <Loading />
                         ) : alerts.length === 0 ? (
@@ -90,16 +97,23 @@ export default function DashboardScreen() {
                         )}
                     </View>
 
-                    {/* Aquí iría la sección de KPIs detallados en el futuro */}
-                     <View style={styles.section}>
-                        <Typo size={18} fontWeight="600" style={{marginBottom: spacingY._10}}>
-                            Métricas Recientes (KPIs)
+                    <View style={styles.section}>
+                        <Typo size={18} fontWeight="600" style={{ marginBottom: spacingY._10 }}>
+                            Evolución de Sostenibilidad
                         </Typo>
-                        <View style={styles.emptyState}>
-                            <Typo size={14} color={colors.neutral400} style={{textAlign: 'center'}}>
-                                Usa el chat para registrar métricas o conecta sensores para ver la evolución aquí.
-                            </Typo>
-                        </View>
+
+                        <KPIGraph
+                            title="Salud del Suelo (NDVI)"
+                            data={kpiData.filter(d => d.kpi_name === 'SOIL_HEALTH_NDVI')}
+                            color={colors.green}
+                        />
+
+
+                        <KPIGraph
+                            title="Eficiencia Hídrica"
+                            data={kpiData.filter(d => d.kpi_name === 'WATER_EFFICIENCY')}
+                            color={colors.primary}
+                        />
                     </View>
 
                 </ScrollView>

@@ -26,6 +26,16 @@ export const logKPIMetric = async (parcelId: number, kpiName: string, value: num
     }
 };
 
-// NOTA: Como no creamos un endpoint específico de "get all recommendations" en el backend todavía,
-// vamos a asumir por ahora que las obtenemos a través de las parcelas o las alertas.
-// Para este paso, nos centraremos en las ALERTAS que sí tienen endpoint.
+export const getKPIHistory = async (parcelId: number, kpiName?: string): Promise<KPIMetric[]> => {
+    try {
+        let url = `/kpi/parcels/${parcelId}/history`;
+        if (kpiName) {
+            url += `?kpi_name=${kpiName}`;
+        }
+        const response = await apiClient.get<KPIMetric[]>(url);
+        return response.data;
+    } catch (error) {
+        console.error("Error fetching KPI history:", error);
+        return [];
+    }
+};
