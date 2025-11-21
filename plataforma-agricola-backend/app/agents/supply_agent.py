@@ -1,16 +1,23 @@
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain.agents import create_tool_calling_agent, AgentExecutor
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_classic.agents import create_tool_calling_agent, AgentExecutor
 from langchain_core.messages import AIMessage
 
 from app.core.config import GOOGLE_API_KEY
 from app.graph.graph_state import GraphState
 from app.agents.agent_tools import (
-    knowledge_base_tool,
+    get_parcel_details,
     get_market_price,
+    list_user_parcels,
+    save_recommendation,
 )
 
-supply_tools = [knowledge_base_tool, get_market_price]
+supply_chain_tools = [
+    get_market_price,
+    get_parcel_details,
+    list_user_parcels,
+    save_recommendation,
+]
 
 
 llm = ChatGoogleGenerativeAI(
@@ -40,9 +47,9 @@ async def supply_chain_agent_node(state: GraphState) -> dict:
         MessagesPlaceholder(variable_name="agent_scratchpad"),
     ])
 
-    agent = create_tool_calling_agent(llm, supply_tools, prompt)
+    agent = create_tool_calling_agent(llm, supply_chain_tools, prompt)
     agent_executor = AgentExecutor(
-        agent=agent, tools=supply_tools, verbose=True)
+        agent=agent, tools=supply_chain_tools, verbose=True)
 
     try:
         response = await agent_executor.ainvoke({"messages": state["messages"]})

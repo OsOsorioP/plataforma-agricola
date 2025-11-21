@@ -1,13 +1,22 @@
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain.agents import create_tool_calling_agent, AgentExecutor
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_classic.agents import create_tool_calling_agent, AgentExecutor
 from langchain_core.messages import AIMessage
 
 from app.core.config import GOOGLE_API_KEY
 from app.graph.graph_state import GraphState
-from app.agents.agent_tools import get_kpi_summary
+from app.agents.agent_tools import (get_kpi_summary,
+                                    get_parcel_health_indices,
+                                    get_parcel_details,
+                                    list_user_parcels
+                                    )
 
-kpi_tools = [get_kpi_summary]
+kpi_tools = [
+    get_kpi_summary,
+    get_parcel_health_indices,
+    get_parcel_details,
+    list_user_parcels,
+]
 
 llm = ChatGoogleGenerativeAI(
     model="gemini-2.5-flash-lite", temperature=0, google_api_key=GOOGLE_API_KEY)
@@ -35,7 +44,8 @@ async def kpi_agent_node(state: GraphState) -> dict:
     ])
 
     agent = create_tool_calling_agent(llm, kpi_tools, prompt)
-    agent_executor = AgentExecutor(agent=agent, tools=kpi_tools, verbose=True)
+    agent_executor = AgentExecutor(
+        agent=agent, tools=kpi_tools, verbose=True)
 
     try:
         response = await agent_executor.ainvoke({"messages": state["messages"]})

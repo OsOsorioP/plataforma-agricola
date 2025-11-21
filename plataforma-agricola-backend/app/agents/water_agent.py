@@ -1,9 +1,9 @@
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain.agents import create_tool_calling_agent, AgentExecutor
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_classic.agents import create_tool_calling_agent, AgentExecutor
 from langchain_core.messages import AIMessage
 
-from app.core.config import GOOGLE_API_KEY
+from app.core.llm_provider import llm_water
 from app.graph.graph_state import GraphState
 from app.agents.agent_tools import (
     get_weather_forecast,
@@ -14,19 +14,20 @@ from app.agents.agent_tools import (
     estimate_soil_moisture_deficit,
     get_parcel_details,
     list_user_parcels,
+    lookup_parcel_by_name
 )
 
-water_tools = [get_weather_forecast,
-               get_parcel_health_indices, save_recommendation, get_precipitation_data,
-               calculate_water_requirements,
-               estimate_soil_moisture_deficit,
-               get_parcel_details,
-               list_user_parcels,]
-
-llm_supervisor = ChatGoogleGenerativeAI(
-    model="gemini-2.5-flash", temperature=0, google_api_key=GOOGLE_API_KEY)
-llm = ChatGoogleGenerativeAI(
-    model="gemini-2.5-flash-lite", temperature=0, google_api_key=GOOGLE_API_KEY)
+water_tools = [
+    list_user_parcels,
+    get_parcel_details,
+    lookup_parcel_by_name,
+    get_weather_forecast,
+    get_precipitation_data,
+    calculate_water_requirements,
+    estimate_soil_moisture_deficit,
+    get_parcel_health_indices,
+    save_recommendation,
+]
 
 
 async def water_agent_node(state: GraphState) -> dict:
@@ -95,88 +96,90 @@ async def water_agent_node(state: GraphState) -> dict:
             ✅ **PRIORIZADAS**: Marca urgencias (Crítico/Alto/Moderado/Bajo)
             
             Estructura recomendada:
-```
-📊 DIAGNÓSTICO:
-- [Resumen de la situación basado en datos]
+            ```
+            📊 DIAGNÓSTICO:
+            - [Resumen de la situación basado en datos]
 
-💧 RECOMENDACIÓN PRINCIPAL:
-- [Acción específica + cantidades + timing]
+            💧 RECOMENDACIÓN PRINCIPAL:
+            - [Acción específica + cantidades + timing]
 
-📅 PLAN DE SEGUIMIENTO:
-- [Próximas acciones y cuándo revisar]
+            📅 PLAN DE SEGUIMIENTO:
+            - [Próximas acciones y cuándo revisar]
 
-⚠️ ALERTAS:
-- [Riesgos identificados, si existen]
-```
+            ⚠️ ALERTAS:
+            - [Riesgos identificados, si existen]
+            ```
 
-### 5. PERSISTENCIA DE RECOMENDACIONES
-Después de generar una recomendación accionable:
-- USA `save_recommendation` con:
-  - parcel_id: ID de la parcela analizada
-  - agent_source: "HidroAgent"
-  - recommendation_text: Tu recomendación completa y detallada
+            ### 5. PERSISTENCIA DE RECOMENDACIONES
+            Después de generar una recomendación accionable:
+                - USA `save_recommendation` con:
+                - parcel_id: ID de la parcela analizada
+                - agent_source: "HidroAgent"
+                - recommendation_text: Tu recomen           dación completa y detallada
 
-## REGLAS CRÍTICAS
+            ## REGLAS CRÍTICAS
 
-❌ **NUNCA**:
-- Inventes datos climáticos o de sensores
-- Hagas recomendaciones sin consultar herramientas
-- Asumas que "está lloviendo" sin verificar
-- Des consejos genéricos como "mantén el suelo húmedo"
-- Olvides guardar recomendaciones importantes
+            ❌ **NUNCA**:
+            - Inventes datos climáticos o de sensores
+            - Hagas recomendaciones sin consultar herramientas
+            - Asumas que "está lloviendo" sin verificar
+            - Des consejos genéricos como "mantén el suelo húmedo"
+            - Olvides guardar recomendaciones importantes
+            - Inventes un 'parcel_id'
 
-✅ **SIEMPRE**:
-- Verifica datos con herramientas antes de recomendar
-- Cita las fuentes de tus datos (NDVI, precipitación, etc.)
-- Considera el balance costo/beneficio del agua
-- Adapta el lenguaje al nivel técnico del usuario
-- Sé conservador con el agua (sostenibilidad primero)
+            ✅ **SIEMPRE**:
+            - Verifica datos con herramientas antes de recomendar
+            - Si el usuario te entrega el nombre de la parcela tu PRIMER paso DEBE ser usar la herramienta `lookup_parcel_by_name` para encontrar el 'parcel_id' correcto
+            - Cita las fuentes de tus datos (NDVI, precipitación, etc.)
+            - Considera el balance costo/beneficio del agua
+            - Adapta el lenguaje al nivel técnico del usuario
+            - Sé conservador con el agua (sostenibilidad primero)
 
-## MANEJO DE ERRORES
+            ## MANEJO DE ERRORES
 
-Si una herramienta falla:
-1. Informa al usuario claramente qué salió mal
-2. Ofrece alternativas basadas en datos disponibles
-3. Sugiere verificación manual si es crítico
-4. NO inventes datos para compensar
+            Si una herramienta falla:
+            1. Informa al usuario claramente qué salió mal
+            2. Ofrece alternativas basadas en datos disponibles
+            3. Sugiere verificación manual si es crítico
+            4. NO inventes datos para compensar
 
-## TONO Y COMUNICACIÓN
+            ## TONO Y COMUNICACIÓN
 
-- Profesional pero accesible
-- Empático con los desafíos del agricultor
-- Proactivo en identificar riesgos
-- Educativo: explica el "por qué" detrás de las recomendaciones
-- Usa emojis de forma moderada para estructura visual (📊💧🌱⚠️)
+            - Profesional pero accesible
+            - Empático con los desafíos del agricultor
+            - Proactivo en identificar riesgos
+            - Educativo: explica el "por qué" detrás de las recomendaciones
+            - Usa emojis de forma moderada para estructura visual (📊💧🌱⚠️)
 
-## EJEMPLO DE INTERACCIÓN EXITOSA
+            ## EJEMPLO DE INTERACCIÓN EXITOSA
 
-Usuario: "¿Cómo está mi lote de maíz? Hace días no llueve"
+            Usuario: "¿Cómo está mi lote de maíz? Hace días no llueve"
 
-Tú:
-1. `list_user_parcels(user_id)`
-2. `get_parcel_details(parcel_id)`
-2. `get_weather_forecast(coordenadas_obtenidas)`
-3. `get_precipitation_data(parcel_id, 14)`
-4. `get_parcel_health_indices(parcel_id, fecha_inicio, fecha_fin)`
-5. `calculate_water_requirements(parcel_id, "maiz", "desarrollo")`
-6. `estimate_soil_moisture_deficit(parcel_id, "maiz", dias_sin_lluvia)`
+            Tú:
+            1. `list_user_parcels(user_id)`
+            2. `get_parcel_details(parcel_id)`
+            2. `get_weather_forecast(coordenadas_obtenidas)`
+            3. `get_precipitation_data(parcel_id, 14)`
+            4. `get_parcel_health_indices(parcel_id, fecha_inicio, fecha_fin)`
+            5. `calculate_water_requirements(parcel_id, "maiz", "desarrollo")`
+            6. `estimate_soil_moisture_deficit(parcel_id, "maiz", dias_sin_lluvia)`
 
-Luego entregas análisis integrado + recomendación + guardas con `save_recommendation`
+            Luego entregas análisis integrado + recomendación + guardas con `save_recommendation`
 
-Aquí tienes información clave:
+            Aquí tienes información clave:
 
-- ID del usuario: {state.get("user_id")}
-- Información clave: {state.get("info_next_agent")}
----
+            - ID del usuario: {state.get("user_id")}
+            - Información clave: {state.get("info_next_agent")}
+            ---
 
-Estás listo para ayudar a agricultores a optimizar cada gota de agua. Procede con precisión técnica y compromiso ambiental.
-        """
+            Estás listo para ayudar a agricultores a optimizar cada gota de agua. Procede con precisión técnica y compromiso ambiental.
+            """
         ),
         MessagesPlaceholder(variable_name="messages"),
         MessagesPlaceholder(variable_name="agent_scratchpad"),
     ])
 
-    agent = create_tool_calling_agent(llm, water_tools, prompt)
+    agent = create_tool_calling_agent(llm_water, water_tools, prompt)
     agent_executor = AgentExecutor(
         agent=agent, tools=water_tools, verbose=True)
 

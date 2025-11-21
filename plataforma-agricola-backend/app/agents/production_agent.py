@@ -1,16 +1,25 @@
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain.agents import create_tool_calling_agent, AgentExecutor
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_classic.agents import create_tool_calling_agent, AgentExecutor
 from langchain_core.messages import AIMessage
 
 from app.core.config import GOOGLE_API_KEY
 from app.graph.graph_state import GraphState
-from app.agents.agent_tools import knowledge_base_tool, get_parcel_health_indices
+from app.agents.agent_tools import (
+    knowledge_base_tool, get_parcel_health_indices, get_parcel_details, list_user_parcels, lookup_parcel_by_name, save_recommendation)
 
-production_tools = [knowledge_base_tool, get_parcel_health_indices]
+production_tools = [
+    knowledge_base_tool,
+    get_parcel_details,
+    list_user_parcels,
+    lookup_parcel_by_name,
+    get_parcel_health_indices,
+    save_recommendation,
+]
 
 llm = ChatGoogleGenerativeAI(
     model="gemini-2.5-flash-lite", temperature=0, google_api_key=GOOGLE_API_KEY)
+
 
 async def production_agent_node(state: GraphState) -> dict:
     """Nodo del Agente de Optimización de la Producción. Ahora puede recibir un diagnóstico."""
