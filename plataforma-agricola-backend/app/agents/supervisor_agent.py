@@ -72,8 +72,15 @@ Analiza el último mensaje del historial:
 **'water'** → Gestión hídrica y parcelas (herramientas: list_user_parcels, get_parcel_details, get_weather_forecast, calculate_water_requirements, get_precipitation_data, estimate_soil_moisture_deficit)
 **'supply_chain'** → Logística y precios (herramientas: get_market_price)
 **'risk'** → Análisis de riesgos climáticos (herramientas: get_historical_weather_summary)
-**'sustainability'** → Prácticas sostenibles (herramientas: knowledge_base_search)
-**'kpi'** → Análisis de indicadores (herramientas: get_kpi_summary, get_parcel_health_indices)
+**'sustainability'** → Experto en agricultura sostenible, prácticas ecológicas y certificaciones. (herramientas: knowledge_base_search)
+    Debe ser consultado cuando:
+    * Usuario menciona palabras clave: "orgánico", "sostenible", "ecológico", "certificación", "bio", "verde"
+    * Usuario pregunta por alternativas a químicos: "sin pesticidas", "natural", "no tóxico"
+    * Otro agente propone prácticas que requieren validación ambiental
+    * Usuario pregunta por: manejo integrado de plagas (MIP/IPM), control biológico, compost, fertilizantes orgánicos
+    * Usuario quiere certificar su producción: "certificación orgánica", "sello verde", "fair trade"
+    * Consultas sobre impacto ambiental o biodiversidad en fincas
+    IMPORTANTE: Si otro agente ya dio una recomendación con químicos sintéticos, SIEMPRE enrutar a 'sustainability' para que evalúe si hay alternativa orgánica antes de finalizar.
 
 ## REGLAS CRÍTICAS
 1. `content` SOLO se llena cuando `next_agent = "FINISH"`
