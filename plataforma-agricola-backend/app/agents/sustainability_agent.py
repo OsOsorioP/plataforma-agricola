@@ -146,6 +146,7 @@ Respuesta: REQUIERE AJUSTES - El mulch es excelente, pero la urea puede reemplaz
 """
         ),
         MessagesPlaceholder(variable_name="messages"),
+        MessagesPlaceholder(variable_name="agent_scratchpad"),
     ])
 
     agent = create_tool_calling_agent(

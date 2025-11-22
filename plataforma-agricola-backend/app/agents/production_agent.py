@@ -316,7 +316,9 @@ Acciones:
 
     agent = create_tool_calling_agent(llm, production_tools, prompt_production)
     agent_executor = AgentExecutor(
-        agent=agent, tools=production_tools, verbose=True, max_iterations=7,
+        agent=agent, tools=production_tools,
+        verbose=True,
+        max_iterations=7,
         handle_parsing_errors=True,
         return_intermediate_steps=False)
 
@@ -327,6 +329,7 @@ Acciones:
 
         output = response.get("output", "No se pudo generar una respuesta.")
 
+        print(f"\n-- Respuesta del production: {response[1]} --\n")
         print(f"-- Respuesta production: {output[:200]}... --\n")
 
         return {
