@@ -1,7 +1,8 @@
 from typing import Optional
-from langchain.tools import tool, ToolRuntime
+from langchain.tools import tool
 from langchain_classic.tools.retriever import create_retriever_tool
 
+from app.services.vectorstore_service import vectorstore_service
 from app.services.rag_service import get_retriever
 from app.db.database import SessionLocal
 from app.db import db_models
@@ -61,13 +62,11 @@ def get_parcel_details(parcel_id: int) -> str:
 
 
 @tool
-def list_user_parcels(user_id: int, runtime: ToolRuntime) -> str:
+def list_user_parcels(user_id: int) -> str:
     """
     Lista todas las parcelas de un usuario.
     Devuelve: lista con IDs, nombres, ubicaciones y áreas.
     """
-    runtime.state["user_id"]
-    print(f"\n--- prueba state tool: user_id {runtime} ---\n")
 
     db = SessionLocal()
     try:
@@ -913,7 +912,7 @@ def get_data_agromy(departamento: str, producto: str, limite: int = 100) -> str:
 # ============================================================================
 # HERRAMIENTA RAG (BASE DE CONOCIMIENTO)
 # ============================================================================
-retriever = get_retriever()
+retriever = vectorstore_service.get_retriever()
 knowledge_base_tool = create_retriever_tool(
     retriever,
     "knowledge_base_search",
