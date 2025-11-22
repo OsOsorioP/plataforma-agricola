@@ -178,3 +178,5 @@ pyrightconfig.json
 alembic.ini
 
 Vectorstore_db/
+
+alembic/
