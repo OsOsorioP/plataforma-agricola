@@ -34,8 +34,8 @@ import json
 @tool
 def get_parcel_details(parcel_id: int) -> str:
     """
-    Obtiene detalles completos de una parcela específica.
-    Devuelve: nombre, coordenadas, área (hectáreas y m²), GeoJSON.
+    Obtiene detalles COMPLETOS de una parcela incluyendo información del cultivo,
+    suelo, riego y estado actual de salud.
     """
     db = SessionLocal()
     try:
@@ -46,61 +46,199 @@ def get_parcel_details(parcel_id: int) -> str:
         if not parcel:
             return _safe_json_response(False, error=f"Parcela {parcel_id} no encontrada")
 
-        return _safe_json_response(True, {
+        # Calcular días desde siembra si existe
+        days_since_planting = None
+        if parcel.planting_date:
+            days_since_planting = (datetime.now() - parcel.planting_date).days
+
+        # Información completa estructurada
+        parcel_data = {
+            # Información básica
             "parcel_id": parcel.id,
             "name": parcel.name,
             "coordinates": parcel.location,
             "area_hectares": parcel.area,
             "area_m2": parcel.area * 10000,
             "geojson": parcel.geometry,
-            "owner_id": parcel.owner_id
-        })
+            "owner_id": parcel.owner_id,
+
+            # Información del cultivo
+            "crop_info": {
+                "crop_type": parcel.crop_type,
+                "development_stage": parcel.development_stage,
+                "planting_date": parcel.planting_date.isoformat() if parcel.planting_date else None,
+                "days_since_planting": days_since_planting
+            },
+
+            # Características del suelo
+            "soil_info": {
+                "soil_type": parcel.soil_type,
+                "soil_ph": parcel.soil_ph
+            },
+
+            # Sistema de riego
+            "irrigation_info": {
+                "irrigation_type": parcel.irrigation_type
+            },
+
+            # Estado actual de salud
+            "health_info": {
+                "health_status": parcel.health_status,
+                "current_issues": parcel.current_issues
+            }
+        }
+
+        return _safe_json_response(True, parcel_data)
+
     except Exception as e:
         return _safe_json_response(False, error=f"Error al obtener detalles: {str(e)}")
     finally:
         db.close()
 
+@tool
+def update_parcel_info(
+    parcel_id: int,
+    crop_type: Optional[str] = None,
+    development_stage: Optional[str] = None,
+    soil_type: Optional[str] = None,
+    soil_ph: Optional[float] = None,
+    irrigation_type: Optional[str] = None,
+    health_status: Optional[str] = None,
+    current_issues: Optional[str] = None
+) -> str:
+    """
+    Actualiza información de la parcela. Los agentes pueden usar esto para:
+    - Actualizar el estado de salud detectado por análisis
+    - Registrar problemas identificados
+    - Actualizar la etapa de desarrollo del cultivo
+    - Registrar observaciones importantes
+    
+    Solo actualiza los campos que se proporcionen (los demás quedan sin cambios).
+    """
+    db = SessionLocal()
+    try:
+        parcel = db.query(db_models.Parcel).filter(
+            db_models.Parcel.id == parcel_id
+        ).first()
+        
+        if not parcel:
+            return _safe_json_response(False, error=f"Parcela {parcel_id} no encontrada")
+        
+        # Actualizar solo los campos proporcionados
+        updated_fields = []
+        
+        if crop_type is not None:
+            parcel.crop_type = crop_type
+            updated_fields.append("crop_type")
+            
+        if development_stage is not None:
+            parcel.development_stage = development_stage
+            updated_fields.append("development_stage")
+            
+        if soil_type is not None:
+            parcel.soil_type = soil_type
+            updated_fields.append("soil_type")
+            
+        if soil_ph is not None:
+            if 0 <= soil_ph <= 14:
+                parcel.soil_ph = soil_ph
+                updated_fields.append("soil_ph")
+            else:
+                return _safe_json_response(False, error="pH debe estar entre 0 y 14")
+        
+        if irrigation_type is not None:
+            parcel.irrigation_type = irrigation_type
+            updated_fields.append("irrigation_type")
+            
+        if health_status is not None:
+            parcel.health_status = health_status
+            updated_fields.append("health_status")
+            
+        if current_issues is not None:
+            # Si ya hay issues, agregarlos con timestamp
+            if parcel.current_issues:
+                timestamp = datetime.now().strftime("%Y-%m-%d")
+                parcel.current_issues += f"\n[{timestamp}] {current_issues}"
+            else:
+                parcel.current_issues = current_issues
+            updated_fields.append("current_issues")
+        
+        if not updated_fields:
+            return _safe_json_response(False, error="No se proporcionaron campos para actualizar")
+        
+        db.commit()
+        db.refresh(parcel)
+        
+        return _safe_json_response(True, {
+            "parcel_id": parcel_id,
+            "parcel_name": parcel.name,
+            "updated_fields": updated_fields,
+            "message": f"Parcela actualizada exitosamente. Campos actualizados: {', '.join(updated_fields)}"
+        })
+        
+    except Exception as e:
+        db.rollback()
+        return _safe_json_response(False, error=f"Error al actualizar: {str(e)}")
+    finally:
+        db.close()
 
 @tool
 def list_user_parcels(user_id: int) -> str:
     """
-    Lista todas las parcelas de un usuario.
-    Devuelve: lista con IDs, nombres, ubicaciones y áreas.
+    Lista todas las parcelas del usuario con su información de cultivo y estado actual.
+    Útil para dar una visión general de todas las parcelas del agricultor.
     """
-
     db = SessionLocal()
     try:
         user = db.query(db_models.User).filter(
             db_models.User.id == user_id
         ).first()
-
+        
         if not user:
             return _safe_json_response(False, error=f"Usuario {user_id} no encontrado")
-
+        
         if not user.parcels:
             return _safe_json_response(True, {
                 "user_id": user_id,
                 "email": user.email,
                 "parcels": [],
+                "total_parcels": 0,
                 "message": "Este usuario no tiene parcelas registradas"
             })
-
-        parcels_data = [
-            {
+        
+        parcels_data = []
+        for p in user.parcels:
+            # Calcular días desde siembra si existe
+            days_since_planting = None
+            if p.planting_date:
+                days_since_planting = (datetime.now() - p.planting_date).days
+            
+            parcel_info = {
                 "id": p.id,
                 "name": p.name,
                 "location": p.location,
-                "area_hectares": p.area
+                "area_hectares": p.area,
+                
+                # Información del cultivo
+                "crop_type": p.crop_type,
+                "development_stage": p.development_stage,
+                "days_since_planting": days_since_planting,
+                
+                # Estado actual
+                "health_status": p.health_status,
+                "has_current_issues": bool(p.current_issues),
+                "current_issues_summary": p.current_issues[:100] + "..." if p.current_issues and len(p.current_issues) > 100 else p.current_issues
             }
-            for p in user.parcels
-        ]
-
+            parcels_data.append(parcel_info)
+        
         return _safe_json_response(True, {
             "user_id": user_id,
             "email": user.email,
             "total_parcels": len(parcels_data),
-            "parcels": parcels_data
+            "parcels": parcels_data,
+            "summary": f"El usuario tiene {len(parcels_data)} parcela(s) registrada(s)"
         })
+        
     except Exception as e:
         return _safe_json_response(False, error=f"Error al listar parcelas: {str(e)}")
     finally:
