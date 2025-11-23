@@ -1,5 +1,5 @@
 // components/CreateParcelForm.tsx
-import { StyleSheet, View, Text, TextInput, Button, Alert, ActivityIndicator } from "react-native";
+import { StyleSheet, View, Text, TextInput, Button, Alert } from "react-native";
 import React, { useState } from 'react';
 import { createParcel } from "@/services/parcelService";
 import { ParcelCreate } from '@/types/parcels';

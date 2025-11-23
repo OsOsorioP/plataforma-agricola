@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, View, Button, Alert, ActivityIndicator, TextInput, Text } from 'react-native';
+import { StyleSheet, View, Button, Alert, ActivityIndicator, Text } from 'react-native';
 import MapView, { Polygon, Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
 import * as turf from '@turf/turf';
 import { useRouter } from 'expo-router';
-import { createParcel } from '@/services/parcelService';
+import { CreateParcelFormEnhanced } from './CreateParcelFormEnhanced';
 
 interface ParcelMapDrawProps {
     onParcelCreated: () => void;
@@ -25,10 +25,11 @@ interface point {
 
 export function ParcelMapDraw({ onParcelCreated, onCancel }: ParcelMapDrawProps) {
     const router = useRouter();
-    const [name, setName] = useState('');
     const [isDrawing, setIsDrawing] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [locationLoading, setLocationLoading] = useState(true);
+    const [showForm, setShowForm] = useState(false)
+    const [geometryData, setGeometryData] = useState<{ geometry: string; area: number; location: string; }>({ geometry: "", area: 0, location: "" })
 
     const [initialRegion, setInitialRegion] = useState<region>();
     const [points, setPoints] = useState<point[]>([]);
@@ -97,10 +98,8 @@ export function ParcelMapDraw({ onParcelCreated, onCancel }: ParcelMapDrawProps)
     };
 
     const handleSave = async () => {
-        if (!name.trim()) {
-            Alert.alert('Error', 'Por favor, ingresa un nombre para la parcela.');
-            return;
-        }
+
+
         setIsLoading(true);
 
         const coordinates = points.map(p => [p.longitude, p.latitude]);
@@ -110,23 +109,15 @@ export function ParcelMapDraw({ onParcelCreated, onCancel }: ParcelMapDrawProps)
         const center = turf.centerOfMass(turfPolygon);
         const locationString = `${center.geometry.coordinates[1]},${center.geometry.coordinates[0]}`;
 
-        const parcelData = {
-            name: name,
-            location: locationString,
-            area: parseFloat(area.toFixed(4)),
+        const geometryData = {
             geometry: JSON.stringify(geometry),
+            area: parseFloat(area.toFixed(4)),
+            location: locationString
         };
 
-        try {
-            await createParcel(parcelData);
-            Alert.alert('Éxito', 'Parcela guardada correctamente!');
-            router.back();
-        } catch (error) {
-            console.error('Error al guardar la parcela:', error);
-            Alert.alert('Error', 'No se pudo guardar la parcela.');
-        } finally {
-            setIsLoading(false);
-        }
+
+        setShowForm(true);
+        setGeometryData(geometryData);
     };
 
     if (locationLoading) {
@@ -179,19 +170,23 @@ export function ParcelMapDraw({ onParcelCreated, onCancel }: ParcelMapDrawProps)
 
                 {points.length >= 3 && !isDrawing && (
                     <>
-                        <TextInput
-                            style={styles.input}
-                            placeholder="Nombre de la Parcela"
-                            value={name}
-                            onChangeText={setName}
-                        />
                         <Button
                             title={isLoading ? "Guardando..." : "Guardar Parcela"}
                             onPress={handleSave}
-                            disabled={isLoading || !name.trim()}
+                            disabled={isLoading}
                             color="#1E90FF"
                         />
                     </>
+                )}
+                {showForm && (
+                    <CreateParcelFormEnhanced
+                        geometryData={geometryData}
+                        onParcelCreated={() => {
+                            setShowForm(false);
+                            onParcelCreated();
+                        }}
+                        onCancel={() => setShowForm(false)}
+                    />
                 )}
             </View>
         </View>
@@ -213,7 +208,7 @@ const styles = StyleSheet.create({
         flex: 3,
     },
     controls: {
-        flex: 2,
+        flex: 4,
         padding: 15,
         backgroundColor: '#fff',
         borderTopLeftRadius: 20,
