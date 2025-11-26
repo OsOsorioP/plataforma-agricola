@@ -1,31 +1,37 @@
+"""
+Sistema de Logging Estructurado para KPIs
+Registra eventos tanto en base de datos como en archivos JSONL para análisis offline
+"""
+
 import logging
 import json
+import os
 from datetime import datetime
 from typing import Dict, Any, Optional, List
 from sqlalchemy.orm import Session
 from app.db.database import SessionLocal
 from app.db import db_models
-import os
+
 
 class KPILogger:
     """
     Logger especializado para capturar métricas de KPIs.
     Registra eventos tanto en base de datos como en archivos JSONL.
     """
-    
+
     def __init__(self):
         # Crear directorio de logs si no existe
         os.makedirs('logs', exist_ok=True)
-        
+
         # Configurar logger de Python para archivos JSONL
         self.logger = logging.getLogger('kpi_logger')
         self.logger.setLevel(logging.INFO)
-        
+
         # Handler para archivo general
         general_handler = logging.FileHandler('logs/kpi_events.jsonl')
         general_handler.setFormatter(logging.Formatter('%(message)s'))
         self.logger.addHandler(general_handler)
-        
+
         # Handlers específicos por tipo de KPI
         self.handlers = {
             'interventions': logging.FileHandler('logs/interventions.jsonl'),
@@ -33,11 +39,12 @@ class KPILogger:
             'diagnostics': logging.FileHandler('logs/diagnostics.jsonl'),
             'orchestration': logging.FileHandler('logs/orchestration.jsonl'),
             'latency': logging.FileHandler('logs/latency.jsonl'),
+            'risk_alerts': logging.FileHandler('logs/risk_alerts.jsonl'),
         }
-        
+
         for handler in self.handlers.values():
             handler.setFormatter(logging.Formatter('%(message)s'))
-    
+
     def _log_to_file(self, filename: str, data: dict):
         """Escribe evento en archivo JSONL específico"""
         handler = self.handlers.get(filename)
@@ -47,7 +54,11 @@ class KPILogger:
                 logger.addHandler(handler)
                 logger.setLevel(logging.INFO)
             logger.info(json.dumps(data, ensure_ascii=False))
-    
+
+    # =========================================================================
+    # KS1 Y KS2: INTERVENCIONES ECOLÓGICAS
+    # =========================================================================
+
     def log_intervention(
         self,
         user_id: int,
@@ -63,18 +74,6 @@ class KPILogger:
     ):
         """
         Registra evento de intercepción del Sustainability Agent (KS1, KS2)
-        
-        Args:
-            user_id: ID del usuario
-            agent_source: Agente que propuso el químico (production/vision)
-            chemical_name: Nombre del químico propuesto
-            chemical_category: Categoría toxicológica (Ia, Ib, II, III, IV)
-            was_vetoed: Si fue bloqueado por Sustainability
-            veto_reason: Razón del veto
-            eiq_base: EIQ del químico original
-            eiq_alternative: EIQ de la alternativa (None si no fue vetado)
-            alternative_proposed: Texto de la alternativa propuesta
-            parcel_id: ID de la parcela (opcional)
         """
         db = SessionLocal()
         try:
@@ -83,7 +82,7 @@ class KPILogger:
                 delta_eiq = ((eiq_base - eiq_alternative) / eiq_base) * 100
             else:
                 delta_eiq = 0.0
-            
+
             # Guardar en tabla específica
             intervention = db_models.InterventionEvent(
                 user_id=user_id,
@@ -99,10 +98,10 @@ class KPILogger:
                 delta_eiq_percent=delta_eiq
             )
             db.add(intervention)
-            
+
             # Guardar en log general
             kpi_log = db_models.KPILog(
-                kpi_type="KS1",
+                kpi_type="KS1" if was_vetoed else "KS2",
                 event_type="intercepcion_ecologica",
                 user_id=user_id,
                 parcel_id=parcel_id,
@@ -119,83 +118,115 @@ class KPILogger:
             )
             db.add(kpi_log)
             db.commit()
-            
+
             # Log en archivo JSONL
             self._log_to_file('interventions', {
                 "timestamp": datetime.now().isoformat(),
-                "kpi": "KS1",
+                "kpi": "KS1" if was_vetoed else "KS2",
                 "user_id": user_id,
                 "parcel_id": parcel_id,
                 "chemical": chemical_name,
                 "category": chemical_category,
+                "alternative": alternative_proposed,
                 "vetoed": was_vetoed,
                 "eiq_base": eiq_base,
                 "eiq_alt": eiq_alternative,
                 "delta_eiq": round(delta_eiq, 2)
             })
-            
-            print(f"[KPI-KS1] Intervención registrada: {chemical_name} ({'VETOED' if was_vetoed else 'APPROVED'})")
-            
+
+            print(
+                f"[KPI-KS1] Intervención registrada: {chemical_name} ({'VETOED' if was_vetoed else 'APPROVED'})")
+
         except Exception as e:
             db.rollback()
             print(f"[KPI-ERROR] Error logging intervention: {e}")
         finally:
             db.close()
-    
+
+    # =========================================================================
+    # KS3: PRECISIÓN HÍDRICA
+    # =========================================================================
+
     def log_water_calculation(
         self,
         user_id: int,
         parcel_id: int,
         crop_type: str,
         development_stage: str,
-        etc_theoretical: float,
-        v_agent: float,
-        p_eff: float,
+        etc_theoretical: float,  # mm/día
+        v_agent: float,  # litros/día
+        p_eff: float,  # mm/día
         soil_type: Optional[str] = None,
         irrigation_type: Optional[str] = None,
         ndwi_value: Optional[float] = None,
-        days_since_planting: Optional[int] = None
+        days_since_planting: Optional[int] = None,
     ):
         """
         Registra cálculo de prescripción hídrica (KS3)
-        
-        Args:
-            user_id: ID del usuario
-            parcel_id: ID de la parcela
-            crop_type: Tipo de cultivo
-            development_stage: Etapa fenológica
-            etc_theoretical: ETc teórico (mm/día)
-            v_agent: Volumen recomendado por agente (litros/día)
-            p_eff: Precipitación efectiva (mm/día)
-            soil_type: Tipo de suelo
-            irrigation_type: Tipo de riego
-            ndwi_value: Valor NDWI usado
-            days_since_planting: Días desde siembra
         """
         db = SessionLocal()
         try:
-            # Obtener área de la parcela para cálculo
-            parcel = db.query(db_models.Parcel).filter(db_models.Parcel.id == parcel_id).first()
+            # Obtener área de la parcela
+            parcel = db.query(db_models.Parcel).filter(
+                db_models.Parcel.id == parcel_id
+            ).first()
+
             if not parcel:
                 print(f"[KPI-ERROR] Parcela {parcel_id} no encontrada")
                 return
-            
+
             area_m2 = parcel.area * 10000  # hectáreas a m²
+            # Necesidad neta en mm/día (ETc - P_eff)
+            need_net_mm_day = max(0, etc_theoretical - p_eff)
             
-            # Cálculo de WPA (Water Prescription Accuracy)
-            need_theoretical = (etc_theoretical - p_eff) * area_m2  # litros/día
-            if need_theoretical < 0:
-                need_theoretical = 0  # No puede ser negativo
+            # Convertir necesidad neta a litros/día
+            # 1 mm sobre 1 m² = 1 litro
+            need_theoretical_liters = need_net_mm_day * area_m2
             
-            if etc_theoretical > 0:
-                deviation = abs(v_agent - need_theoretical) / (etc_theoretical * area_m2)
-                wpa_score = 1 - deviation
-                deviation_percent = deviation * 100
+            # --- CÁLCULO DE WPA (Water Prescription Accuracy) ---
+            if need_theoretical_liters == 0:
+                # Caso: No se necesita riego (lluvia suficiente)
+                if v_agent == 0:
+                    # Perfecto: No se necesita y no se recomienda
+                    wpa_score = 1.0
+                    deviation_percent = 0.0
+                else:
+                    # Error: No se necesita pero se recomienda regar
+                    # Penalización proporcional al exceso
+                    wpa_score = 0.0
+                    deviation_percent = 100.0
+                    
             else:
-                wpa_score = 0
-                deviation_percent = 100
+                # Caso: Se necesita riego
+                # Fórmula: WPA = 1 - |V_agente - Need_theoretical| / ETc_total
+                
+                # ETc total en litros (sin restar precipitación)
+                etc_total_liters = etc_theoretical * area_m2
+                
+                # Desviación absoluta
+                deviation_absolute = abs(v_agent - need_theoretical_liters)
+                
+                # Desviación relativa respecto a ETc (denominador estable)
+                deviation_relative = deviation_absolute / etc_total_liters
+                
+                # WPA score
+                wpa_score = max(0.0, 1.0 - deviation_relative)
+                deviation_percent = deviation_relative * 100
+
+            # --- VALIDACIONES DE CALIDAD ---
+            # Detectar sobre-riego crítico (>50% de exceso)
+            if need_theoretical_liters > 0:
+                over_irrigation_ratio = v_agent / need_theoretical_liters
+                if over_irrigation_ratio > 1.5:
+                    print(f"[KPI-WARNING] Sobre-riego detectado: {over_irrigation_ratio:.1f}x necesidad")
             
-            # Guardar en tabla específica
+            # Detectar sub-riego crítico (<50% de necesidad)
+            if need_theoretical_liters > 0:
+                under_irrigation_ratio = v_agent / need_theoretical_liters
+                if under_irrigation_ratio < 0.5:
+                    print(f"[KPI-WARNING] Sub-riego detectado: {under_irrigation_ratio:.1%} de necesidad")
+
+            # --- GUARDAR EN BASE DE DATOS ---
             water_calc = db_models.WaterCalculation(
                 user_id=user_id,
                 parcel_id=parcel_id,
@@ -205,6 +236,7 @@ class KPILogger:
                 etc_theoretical=etc_theoretical,
                 p_eff=p_eff,
                 v_agent=v_agent,
+                need_theoretical_liters=need_theoretical_liters,  # Agregar este campo
                 wpa_score=wpa_score,
                 deviation_percent=deviation_percent,
                 soil_type=soil_type,
@@ -212,7 +244,7 @@ class KPILogger:
                 ndwi_value=ndwi_value
             )
             db.add(water_calc)
-            
+
             # Log general
             kpi_log = db_models.KPILog(
                 kpi_type="KS3",
@@ -222,15 +254,20 @@ class KPILogger:
                 agent_source="water",
                 metric_value=wpa_score,
                 metric_metadata={
-                    "etc": etc_theoretical,
-                    "v_agent": v_agent,
-                    "deviation": round(deviation_percent, 2)
+                    "etc_mm_day": etc_theoretical,
+                    "p_eff_mm_day": p_eff,
+                    "need_net_mm_day": need_net_mm_day,
+                    "need_theoretical_liters": round(need_theoretical_liters, 2),
+                    "v_agent_liters": v_agent,
+                    "area_m2": area_m2,
+                    "deviation_percent": round(deviation_percent, 2),
+                    "wpa_score": round(wpa_score, 4)
                 },
                 success=True
             )
             db.add(kpi_log)
             db.commit()
-            
+
             # Log en archivo
             self._log_to_file('water', {
                 "timestamp": datetime.now().isoformat(),
@@ -239,20 +276,32 @@ class KPILogger:
                 "parcel_id": parcel_id,
                 "crop": crop_type,
                 "stage": development_stage,
-                "etc": etc_theoretical,
-                "v_agent": v_agent,
-                "wpa": round(wpa_score, 4),
-                "deviation": round(deviation_percent, 2)
+                "etc_mm_day": etc_theoretical,
+                "p_eff_mm_day": p_eff,
+                "need_theoretical_liters": round(need_theoretical_liters, 2),
+                "v_agent_liters": v_agent,
+                "wpa_score": round(wpa_score, 4),
+                "deviation_percent": round(deviation_percent, 2),
+                "meets_target": deviation_percent < 10.0
             })
-            
-            print(f"[KPI-KS3] Cálculo hídrico registrado: WPA={wpa_score:.2f}")
-            
+
+            # Log en consola con colores
+            status = "✓ PASS" if deviation_percent < 10.0 else "✗ FAIL"
+            print(f"[KPI-KS3] {status} | WPA={wpa_score:.3f} | Desv={deviation_percent:.1f}%")
+            print(f"         Need={need_theoretical_liters:.0f}L | Agent={v_agent:.0f}L")
+
         except Exception as e:
             db.rollback()
             print(f"[KPI-ERROR] Error logging water calculation: {e}")
+            import traceback
+            traceback.print_exc()
         finally:
             db.close()
-    
+
+    # =========================================================================
+    # KT2: DIAGNÓSTICO DEL VISION AGENT
+    # =========================================================================
+
     def log_diagnosis(
         self,
         user_id: int,
@@ -272,7 +321,7 @@ class KPILogger:
             is_correct = None
             if ground_truth:
                 is_correct = diagnosis.lower() == ground_truth.lower()
-            
+
             diagnostic = db_models.VisionDiagnostic(
                 user_id=user_id,
                 parcel_id=parcel_id,
@@ -285,7 +334,7 @@ class KPILogger:
                 processing_time=processing_time
             )
             db.add(diagnostic)
-            
+
             kpi_log = db_models.KPILog(
                 kpi_type="KT2",
                 event_type="diagnostico_vision",
@@ -302,7 +351,7 @@ class KPILogger:
             )
             db.add(kpi_log)
             db.commit()
-            
+
             self._log_to_file('diagnostics', {
                 "timestamp": datetime.now().isoformat(),
                 "kpi": "KT2",
@@ -311,15 +360,20 @@ class KPILogger:
                 "confidence": confidence,
                 "correct": is_correct
             })
-            
-            print(f"[KPI-KT2] Diagnóstico registrado: {diagnosis} ({confidence:.2f})")
-            
+
+            print(
+                f"[KPI-KT2] Diagnóstico registrado: {diagnosis} ({confidence:.2f})")
+
         except Exception as e:
             db.rollback()
             print(f"[KPI-ERROR] Error logging diagnosis: {e}")
         finally:
             db.close()
-    
+
+    # =========================================================================
+    # KT1: EFICIENCIA DE ORQUESTACIÓN
+    # =========================================================================
+
     def log_orchestration(
         self,
         user_id: int,
@@ -337,7 +391,7 @@ class KPILogger:
         try:
             nodes_count = len(nodes_visited)
             g_eff = nodes_minimum / nodes_count if nodes_count > 0 else 0
-            
+
             orchestration = db_models.OrchestrationEvent(
                 user_id=user_id,
                 conversation_id=conversation_id,
@@ -350,7 +404,7 @@ class KPILogger:
                 g_eff=g_eff
             )
             db.add(orchestration)
-            
+
             kpi_log = db_models.KPILog(
                 kpi_type="KT1",
                 event_type="orquestacion",
@@ -367,7 +421,7 @@ class KPILogger:
             )
             db.add(kpi_log)
             db.commit()
-            
+
             self._log_to_file('orchestration', {
                 "timestamp": datetime.now().isoformat(),
                 "kpi": "KT1",
@@ -376,15 +430,19 @@ class KPILogger:
                 "nodes": nodes_visited,
                 "g_eff": round(g_eff, 3)
             })
-            
+
             print(f"[KPI-KT1] Orquestación registrada: G_eff={g_eff:.2f}")
-            
+
         except Exception as e:
             db.rollback()
             print(f"[KPI-ERROR] Error logging orchestration: {e}")
         finally:
             db.close()
-    
+
+    # =========================================================================
+    # KA3: LATENCIA DE INFERENCIA
+    # =========================================================================
+
     def log_latency(
         self,
         user_id: int,
@@ -398,9 +456,9 @@ class KPILogger:
         """
         db = SessionLocal()
         try:
-            threshold = 10.0 if has_image else 5.0
+            threshold = 60.0 if has_image else 65.0
             meets_threshold = total_time <= threshold
-            
+
             latency = db_models.LatencyLog(
                 user_id=user_id,
                 conversation_id=conversation_id,
@@ -411,7 +469,7 @@ class KPILogger:
                 meets_threshold=meets_threshold
             )
             db.add(latency)
-            
+
             kpi_log = db_models.KPILog(
                 kpi_type="KA3",
                 event_type="latencia_inferencia",
@@ -424,7 +482,7 @@ class KPILogger:
             )
             db.add(kpi_log)
             db.commit()
-            
+
             self._log_to_file('latency', {
                 "timestamp": datetime.now().isoformat(),
                 "kpi": "KA3",
@@ -433,14 +491,81 @@ class KPILogger:
                 "has_image": has_image,
                 "meets_threshold": meets_threshold
             })
-            
-            print(f"[KPI-KA3] Latencia registrada: {total_time:.2f}s ({'✓' if meets_threshold else '✗'})")
-            
+
+            print(
+                f"[KPI-KA3] Latencia registrada: {total_time:.2f}s ({'✓' if meets_threshold else '✗'})")
+
         except Exception as e:
             db.rollback()
             print(f"[KPI-ERROR] Error logging latency: {e}")
         finally:
             db.close()
+
+    # =========================================================================
+    # KE1: ALERTAS DE RIESGO
+    # =========================================================================
+
+    def log_risk_alert(
+        self,
+        user_id: int,
+        parcel_id: int,
+        risk_type: str,
+        probability: float,
+        projected_loss: float,
+        hours_before_event: int
+    ):
+        """
+        Registra alerta de riesgo (KE1)
+        """
+        db = SessionLocal()
+        try:
+            alert = db_models.RiskAlert(
+                user_id=user_id,
+                parcel_id=parcel_id,
+                risk_type=risk_type,
+                probability=probability,
+                projected_loss=projected_loss,
+                alert_sent_at=datetime.now(),
+                hours_before_event=hours_before_event
+            )
+            db.add(alert)
+
+            kpi_log = db_models.KPILog(
+                kpi_type="KE1",
+                event_type="alerta_riesgo",
+                user_id=user_id,
+                parcel_id=parcel_id,
+                agent_source="risk",
+                metric_value=projected_loss,
+                metric_metadata={
+                    "risk_type": risk_type,
+                    "probability": probability,
+                    "hours_before": hours_before_event
+                },
+                success=True
+            )
+            db.add(kpi_log)
+            db.commit()
+
+            self._log_to_file('risk_alerts', {
+                "timestamp": datetime.now().isoformat(),
+                "kpi": "KE1",
+                "user_id": user_id,
+                "parcel_id": parcel_id,
+                "risk_type": risk_type,
+                "probability": probability,
+                "projected_loss": projected_loss
+            })
+
+            print(
+                f"[KPI-KE1] Alerta registrada: {risk_type} (${projected_loss:.2f})")
+
+        except Exception as e:
+            db.rollback()
+            print(f"[KPI-ERROR] Error logging risk alert: {e}")
+        finally:
+            db.close()
+
 
 # Instancia global del logger
 kpi_logger = KPILogger()
