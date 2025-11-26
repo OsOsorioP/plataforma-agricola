@@ -7,6 +7,7 @@ import { colors, spacingX, spacingY } from '@/constants/theme'
 import Typo from '../ui/Typo'
 import { Image } from 'expo-image'
 import { getFileFromBase64 } from '@/utils/base64'
+import Markdown from 'react-native-markdown-display';
 
 export default function MessageItem({
     item
@@ -33,12 +34,12 @@ export default function MessageItem({
                 ]}
             >
                 {!isMe && (
-                    <Typo color={colors.neutral400} fontWeight={"600"} size={13}>
-                        {item.sender}
+                    <Typo color={colors.neutral200} fontWeight={"600"} size={13}>
+                        Agrosmi
                     </Typo>
                 )}
                 {item.attachement && (<Image source={{ uri: `data:image/jpeg;base64,${item.attachement}` }} contentFit='cover' style={styles.attachment} transition={100} />)}
-                {item.content && (<Typo size={15}>{item.content}</Typo>)}
+                {item.content && (<Typo size={15}><Markdown>{item.content}</Markdown></Typo>)}
             </View>
         </View>
     )
@@ -48,7 +49,7 @@ const styles = StyleSheet.create({
     messageContainer: {
         flexDirection: "row",
         gap: spacingX._7,
-        maxWidth: "90%",
+        maxWidth: "100%",
     },
     myMessage: {
         alignItems: "flex-end"
