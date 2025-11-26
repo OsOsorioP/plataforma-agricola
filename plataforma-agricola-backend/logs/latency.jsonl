@@ -1,0 +1,41 @@
+{
+    "timestamp": "2025-11-25T21:56:27.804492", 
+    "kpi": "KA3", 
+    "user_id": 31, 
+    "total_time": 66.13, 
+    "has_image": false, 
+    "meets_threshold": false
+}
+{
+    "timestamp": "2025-11-25T22:01:41.238531", 
+    "kpi": "KA3", 
+    "user_id": 32, 
+    "total_time": 42.76, 
+    "has_image": true, 
+    "meets_threshold": true
+}
+{"timestamp": "2025-11-25T22:14:37.524787", "kpi": "KA3", "user_id": 33, "total_time": 48.96, "has_image": false, "meets_threshold": true}
+{
+    "timestamp": "2025-11-25T22:19:26.902289", "kpi": 
+    "KA3", 
+    "user_id": 34, 
+    "total_time": 62.45, 
+    "has_image": true, 
+    "meets_threshold": false
+}
+{
+    "timestamp": "2025-11-26T07:17:10.618473", 
+    "kpi": "KA3", 
+    "user_id": 35, 
+    "total_time": 36.47, 
+    "has_image": false, 
+    "meets_threshold": true
+}
+{
+    "timestamp": "2025-11-26T07:22:33.700056", 
+    "kpi": "KA3", 
+    "user_id": 36, 
+    "total_time": 35.07, 
+    "has_image": false, 
+    "meets_threshold": true
+}

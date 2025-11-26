@@ -1,0 +1,41 @@
+{
+    "timestamp": "2025-11-25T21:56:27.796492", 
+    "kpi": "KT1", 
+    "user_id": 31, 
+    "conversation_id": "1fa2fb42-0a9a-40b6-9584-a13a9a852787", 
+    "nodes": ["supervisor", "production", "sustainability", "supervisor", "FINISH"], 
+    "g_eff": 1.0
+}
+{
+    "timestamp": "2025-11-25T22:01:41.233566", 
+    "kpi": "KT1", 
+    "user_id": 32, 
+    "conversation_id": "fdcbd3ce-ed7c-4164-9fa4-0f1a0b1ca680", 
+    "nodes": ["supervisor", "vision", "production", "sustainability", "supervisor", "FINISH"], 
+    "g_eff": 0.833
+}
+{"timestamp": "2025-11-25T22:14:37.518754", "kpi": "KT1", "user_id": 33, "conversation_id": "d5965f9b-02f9-4fb0-b6de-294d4c6343c5", "nodes": ["supervisor", "production", "sustainability", "supervisor", "FINISH"], "g_eff": 0.6}
+{
+    "timestamp": "2025-11-25T22:19:26.845328", 
+    "kpi": "KT1", 
+    "user_id": 34, 
+    "conversation_id": "5ca2d877-bc77-4848-8805-afde16878e21", 
+    "nodes": ["supervisor", "vision", "production", "sustainability", "supervisor", "FINISH"], 
+    "g_eff": 0.833
+}
+{
+    "timestamp": "2025-11-26T07:17:10.613506", 
+    "kpi": "KT1", 
+    "user_id": 35, 
+    "conversation_id": "827c7292-8b6a-4ca0-93f7-9df71b5c4e4e", 
+    "nodes": ["supervisor", "water", "supervisor", "FINISH"], 
+    "g_eff": 0.75
+}
+{
+    "timestamp": "2025-11-26T07:22:33.695144", 
+    "kpi": "KT1", 
+    "user_id": 36, 
+    "conversation_id": "fe9381e0-e82e-4657-9e30-0898e11e8ad4", 
+    "nodes": ["supervisor", "water", "supervisor", "FINISH"], 
+    "g_eff": 1.25
+}

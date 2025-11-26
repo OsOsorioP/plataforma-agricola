@@ -1,0 +1,17 @@
+{
+    "timestamp": "2025-11-25T22:01:12.661529", 
+    "kpi": "KT2", 
+    "user_id": 32, 
+    "diagnosis": "Roya del Caf� (Hemileia vastatrix) - Confianza: 85%", 
+    "confidence": 0.85, 
+    "correct": true
+}
+{
+    "timestamp": "2025-11-25T22:18:36.315095", 
+    "kpi": "KT2", 
+    "user_id": 34, 
+    "diagnosis": "**Pudrici�n Apical del Tomate (Blossom End Rot - BER)** - Confianza: ALTA [95%]", 
+    "confidence": 0.95, 
+    "correct": false, 
+    "time":"10.08s"
+}

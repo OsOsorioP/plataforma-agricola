@@ -1,0 +1,26 @@
+{
+    "timestamp": "2025-11-25T21:56:13.358204", 
+    "kpi": "KS1", 
+    "user_id": 31, 
+    "parcel_id": null, 
+    "chemical": "Imidacloprid, Lambda-cihalotrina, Thiamethoxam, Abamectina, Spinosad, Piretrinas, Azadiractina", 
+    "category": "III, II", 
+    "alternative": "Aceite de neem, Beauveria bassiana, Control biol�gico, Extracto, Jab�n pot�sico, Trampa", 
+    "vetoed": true, 
+    "eiq_base": 176.5, 
+    "eiq_alt": 8.5, 
+    "delta_eiq": 95.18
+}
+{
+    "timestamp": "2025-11-25T22:14:26.432653", 
+    "kpi": "KS1", 
+    "user_id": 33, 
+    "parcel_id": null, 
+    "chemical": "Piretrinas", 
+    "category": "III", 
+    "alternative": "Aceite de neem, Bacillus thuringiensis, Beauveria bassiana, Control biol�gico, Crisopas, Extracto, Jab�n pot�sico, Mariquitas, Trampa, Trampas crom�ticas", 
+    "vetoed": true, 
+    "eiq_base": 15.0, 
+    "eiq_alt": 8.5, 
+    "delta_eiq": 43.33
+}
