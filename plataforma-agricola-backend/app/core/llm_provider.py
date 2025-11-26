@@ -37,20 +37,20 @@ llm_supply_chain = ChatGroq(
 )
 
 llm_vision = ChatGoogleGenerativeAI(
-    model="gemini-1.5-pro-latest",
+    model="gemini-2.5-flash",
     temperature=0,
     google_api_key=GOOGLE_API_KEY
 )
 
 llm_production = ChatGroq(
-    model_name="mixtral-8x7b-32768",
+    model_name="gemini-2.5-flash",
     temperature=0,
     groq_api_key=GROQ_API_KEY
 )
 
 llm_sustainability = ChatGoogleGenerativeAI(
     model="gemini-2.5-flash",
-    temperature=0.3,  # Un poco de creatividad para soluciones alternativas
+    temperature=0.3,
     google_api_key=GOOGLE_API_KEY
 )
 llm_kpi = ChatGroq(

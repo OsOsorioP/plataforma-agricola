@@ -1,4 +1,4 @@
-from typing import Dict, TypedDict, Annotated, List, Optional
+from typing import TypedDict, Annotated, List, Optional
 from langgraph.graph.message import add_messages
 from langchain_core.messages import BaseMessage
 
@@ -14,7 +14,7 @@ class GraphState(TypedDict):
         image_base64: La imagen opcional enviada por el usuario.
         reasoning: Razonamiento del supervisor
         info_next_agent: Información para el siguiente agente.
-        agent_history: Historial de los agentes usados por el supervisor.
+        list_agent: Historial de los agentes usados por el supervisor.
     """
     messages: Annotated[List[BaseMessage], add_messages]
     chat_history: List[BaseMessage]
@@ -22,4 +22,6 @@ class GraphState(TypedDict):
     image_base64: Optional[str]
     reasoning: Optional[str]
     info_next_agent: Optional[str]
-    agent_history: List[str]
+    list_agent: List[str]
+    total_start_time: float
+    time_breakdown: dict

@@ -246,6 +246,7 @@ class WaterCalculation(Base):
     # Métricas
     wpa_score = Column(Float)  # Precisión de prescripción hídrica
     deviation_percent = Column(Float)
+    need_theoretical_liters = Column(Float, nullable=True)
 
     # Contexto adicional
     soil_type = Column(String)
@@ -407,3 +408,44 @@ class FeedbackLog(Base):
 
     # Relaciones
     user = relationship("User")
+
+class RagValidationLog(Base):
+    """
+    Tabla para KA2: Auditoría de Alucinaciones RAG
+    """
+    __tablename__ = 'rag_validation_logs'
+
+    id = Column(Integer, primary_key=True)
+    timestamp = Column(DateTime, default=datetime.now)
+    user_id = Column(Integer, ForeignKey('users.id'))
+    
+    query = Column(Text)
+    retrieved_docs = Column(Text) # JSON string con los fragmentos
+    generated_answer = Column(Text)
+    
+    # Validación (llenado por experto humano en 5.5.5)
+    # 0 = Sin alucinación, 1 = Alucinación total
+    hallucination_score = Column(Float, nullable=True) 
+    processing_time = Column(Float)
+
+class RiskEventLog(Base):
+    """
+    Tabla para KE1: Valor en Riesgo Mitigado
+    """
+    __tablename__ = 'risk_event_logs'
+
+    id = Column(Integer, primary_key=True)
+    timestamp = Column(DateTime, default=datetime.now)
+    user_id = Column(Integer, ForeignKey('users.id'))
+    parcel_id = Column(Integer, ForeignKey('parcels.id'))
+    
+    risk_type = Column(String) # Helada, Sequía
+    projected_loss = Column(Float) # Valor estimado de cosecha
+    alert_sent = Column(Boolean)
+    hours_advance = Column(Integer)
+    
+    # Validación Post-Evento (5.5.5)
+    event_occurred = Column(Boolean, nullable=True)
+    user_took_action = Column(Boolean, nullable=True)
+    actual_loss = Column(Float, nullable=True)
+    value_saved = Column(Float, nullable=True) # Calculado: Projected - Actual

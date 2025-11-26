@@ -4,6 +4,9 @@ from app.db import db_models
 from app.db.database import SessionLocal
 from typing import Optional, List, Dict, Any
 
+import time
+import uuid
+
 def save_chat_message(user_id: int, content: str, sender_type: str, attachement: Optional[str] = None):
     """Guarda un mensaje en la base de datos."""
     db = SessionLocal()
@@ -104,21 +107,48 @@ async def run_agent_graph(user_info: Dict[str, Any], user_query: str, image_base
         # Extraemos el ID del diccionario
         user_id = user_info.get("id")
         
+        
+        start_time = time.time()
+        conversation_id = str(uuid.uuid4())
+        
+        print(f"\n{'='*80}")
+        print(f"NUEVA CONVERSACIÓN INICIADA")
+        print(f"{'='*80}")
+        print(f"User ID: {user_id}")
+        print(f"Conversation ID: {conversation_id}")
+        print(f"Query: {user_query[:100]}...")
+        print(f"Imagen: {'Sí' if image_base64 else 'No'}")
+        print(f"{'='*80}\n")
+        
         # 1. Cargar historial previo
         chat_history = load_chat_history(user_id=user_id)
         
         # 2. Preparar estado inicial
         initial_state = {
-            "messages": chat_history + [HumanMessage(content=user_query)],
+            "chat_history":chat_history + [HumanMessage(content=user_query)],
+            "messages": [HumanMessage(content=user_query)],
             "user_id": user_id,
             "image_base64": image_base64,
             "reasoning": None,
             "info_next_agent": None,
-            "agent_history": [],
+            "list_agent": [],
+            "conversation_id": conversation_id,
+            "total_start_time": start_time,
+            "time_breakdown": {},
         }
         
         # 3. Ejecutar el grafo
         final_state = await agent_graph.ainvoke(initial_state)
+        
+        # Calcular tiempo total
+        total_time = time.time() - start_time
+        
+        print(f"\n{'='*80}")
+        print(f"CONVERSACIÓN FINALIZADA")
+        print(f"{'='*80}")
+        print(f"Tiempo total: {total_time:.2f}s")
+        print(f"Agentes visitados: {final_state.get('list_agent', [])}")
+        print(f"{'='*80}\n")
         
         # 4. Obtener la respuesta final de la IA
         final_response_message = next((msg for msg in reversed(final_state["messages"]) if isinstance(msg, AIMessage)), None)
@@ -134,15 +164,10 @@ async def run_agent_graph(user_info: Dict[str, Any], user_query: str, image_base
     except Exception as e:
         print(f"Error al ejecutar el grafo de agentes: {e}")
         import traceback
-        traceback.print_exc() # Esto nos ayudará a ver dónde falló exactamente dentro del try
+        traceback.print_exc()
         
-        # --- CORRECCIÓN AQUÍ ---
-        # Usamos user_info que viene como argumento de la función, no una variable local indefinida.
-        # Y usamos .get() por seguridad.
         safe_user_id = user_info.get("id") if user_info else None
-        
         if safe_user_id:
             return load_chat_history_api(user_id=safe_user_id)
         else:
-            # Si no tenemos ID de usuario, devolvemos lista vacía para no romper nada
             return []
