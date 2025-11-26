@@ -5,7 +5,20 @@ from langchain_core.messages import AIMessage
 from app.core.config import GOOGLE_API_KEY
 from app.graph.graph_state import GraphState
 from app.agents.agent_model import SupervisorDecision
+from app.utils.kpi_logger import kpi_logger
+from app.utils.helper_KT1 import (
+    normalize_message_content,
+    calculate_minimum_nodes,
+    _should_validate_sustainability,
+    _contains_chemical_recommendation,
+    classify_query_type
+)
+from app.utils.helper import extract_user_query, get_agent_responses, build_synthesis_context
 
+import uuid
+import time
+
+from app.utils.helper import save_conversation_log
 
 llm_supervisor = ChatGoogleGenerativeAI(
     model="gemini-2.5-flash",
@@ -13,313 +26,211 @@ llm_supervisor = ChatGoogleGenerativeAI(
     google_api_key=GOOGLE_API_KEY
 )
 
-
-# ============================================================================
-# FUNCIONES HELPER PARA VALIDACIÓN
-# ============================================================================
-
-def _contains_chemical_recommendation(message_content: str) -> bool:
-    """
-    Detecta si una recomendación incluye químicos sintéticos potencialmente problemáticos.
-    """
-    content = normalize_message_content(message_content).lower()
-    chemical_keywords = [
-        # Pesticidas de alta toxicidad
-        "clorpirifos", "paraquat", "glifosato", "imidacloprid", "endosulfan",
-        "metamidofos", "carbofuran", "monocrotofos", "aldicarb",
-
-        # Categorías generales
-        "pesticida", "insecticida", "fungicida", "herbicida", "nematicida",
-
-        # Fertilizantes sintéticos
-        "urea", "superfosfato", "cloruro de potasio", "sulfato de amonio",
-
-        # Frases indicadoras
-        "aplicar químico", "producto químico", "fertilizante sintético"
-    ]
-
-    return any(keyword in content for keyword in chemical_keywords)
-
-
-def _should_validate_sustainability(last_agent: str, message_content: str, agent_history: list) -> bool:
-    """
-    Determina si se debe enrutar a sustainability para validación.
-    """
-    # Si sustainability ya revisó, no volver a enviar
-    if "sustainability" in agent_history:
-        return False
-
-    # Si el último agente fue production o risk y recomendó químicos
-    if last_agent in ["production", "risk"] and _contains_chemical_recommendation(message_content):
-        return True
-
-    return False
-
-
-def normalize_message_content(msg):
-    """
-    Convierte el contenido de un BaseMessage (str, list, dict, etc.)
-    en un string plano seguro para análisis.
-    """
-    if msg is None:
-        return ""
-
-    # Caso: string normal
-    if isinstance(msg, str):
-        return msg
-
-    # Caso: lista (Gemini vision / multimodal)
-    if isinstance(msg, list):
-        parts = []
-        for item in msg:
-            if isinstance(item, str):
-                parts.append(item)
-            elif isinstance(item, dict):
-                # típicamente Gemini devuelve {"type": "text", "text": "..."}
-                if "text" in item:
-                    parts.append(str(item["text"]))
-                elif "content" in item:
-                    parts.append(str(item["content"]))
-                else:
-                    parts.append(str(item))
-            else:
-                parts.append(str(item))
-        return " ".join(parts)
-
-    # Caso: dict
-    if isinstance(msg, dict):
-        return " ".join([f"{k}: {v}" for k, v in msg.items()])
-
-    # Caso general
-    return str(msg)
-
-
 # ============================================================================
 # NODO DEL SUPERVISOR
 # ============================================================================
+
 
 async def supervisor_agent_node(state: GraphState) -> dict:
     """
     Supervisor que orquesta el flujo multi-agente.
     Decide si enrutar a otro agente o finalizar con una respuesta al usuario.
     """
-    print("-- Node ejecutándose: Supervisor --")
+    print("\n-- Node ejecutándose: Supervisor --")
 
-    # Extraer contexto
+    supervisor_start_time = time.time()
+
+    if not state.get("conversation_id"):
+        state["conversation_id"] = str(uuid.uuid4())
+
+    conversation_id = state["conversation_id"]
+
+    # Extraer contexto de la CONVERSACIÓN ACTUAL
     has_image = bool(state.get('image_base64'))
-    agent_history = state.get('agent_history', [])
+    agent_history = state.get('list_agent', [])
     last_agent = agent_history[-1] if agent_history else None
-    reasoning_prev = state.get('reasoning', 'Ninguno')
-    raw_content = state["messages"][-1].content if state.get(
-        "messages") else ""
-    last_message_content = normalize_message_content(raw_content)
+    
+    # Obtener MENSAJES de la conversación ACTUAL
+    current_messages = state.get("messages", [])
+    user_query = extract_user_query(current_messages)
+    agent_responses = get_agent_responses(current_messages)
+    
+    # Último mensaje del último agente
+    last_message_content = ""
+    if current_messages:
+        last_msg = current_messages[-1]
+        if hasattr(last_msg, 'content'):
+            last_message_content = normalize_message_content(last_msg.content)
+    
+    # Contexto del historial ANTERIOR (para recordar nombre, consultas previas, etc.)
+    chat_history = state.get('chat_history', [])
+    has_previous_context = len(chat_history) > 0
+
+    # Construir síntesis para decisión
+    synthesis_context = build_synthesis_context(current_messages)
 
     # Construir prompt con contexto dinámico
     prompt = ChatPromptTemplate.from_messages([
         (
             "system",
-            f"""Eres el **Supervisor Orquestador** de un sistema multi-agente agrícola. Tu misión es dirigir consultas al agente especializado más apropiado o finalizar cuando la tarea esté completa.
+            f"""Eres el **Supervisor Orquestador** de un sistema multi-agente agrícola. 
 
-## TU RESPUESTA DEBE SER UN JSON CON ESTA ESTRUCTURA:
-  "next_agent": "nombre_agente" o "FINISH", este NUNCA debe ser un None,
-  "reasoning": "explicación de tu decisión",
-  "info_for_next_agent": "contexto relevante para el próximo agente",
-  "content": "respuesta final SOLO si next_agent es FINISH, de lo contrario vacío"
+## TU MISIÓN EN ESTA CONVERSACIÓN
+
+Estás orquestando una CONSULTA ESPECÍFICA del usuario. Tienes acceso a:
+
+1. **CONVERSACIÓN ACTUAL** (messages): La consulta del usuario + respuestas de agentes especializados
+2. **HISTORIAL PREVIO** (chat_history): Conversaciones anteriores (SOLO para contexto si el usuario hace referencia)
+
+---
+
+## RESPUESTA JSON REQUERIDA
+
+Tu respuesta SIEMPRE debe tener esta estructura:
+
+
+  "next_agent": "nombre_agente" o "FINISH" NUNCA DEBE SER NONE,
+  "reasoning": "por qué tomaste esta decisión",
+  "info_for_next_agent": "contexto para el siguiente agente (vacío si FINISH)",
+  "content": "RESPUESTA FINAL SINTETIZADA (solo si FINISH, vacío si no)"
+
+
+---
+
+## RESUMEN DE LA CONVERSACIÓN ACTUAL
+
+{synthesis_context}
 
 ---
 
 ## PROCESO DE DECISIÓN (ORDEN ESTRICTO)
 
-### 1. PRIORIDAD IMAGEN
-**REGLA ABSOLUTA**: Si hay imagen (`image_base64`: {'Sí' if has_image else 'No'}) y 'vision' NO está en el historial → **ENRUTAR A 'vision' INMEDIATAMENTE**
+### 1 PRIORIDAD IMAGEN
+**SI HAY IMAGEN** (`{has_image}`) **Y 'vision' NO ESTÁ EN**: {agent_history}
+→ **next_agent = "vision"**
+→ **info_for_next_agent = "Analizar imagen adjunta por el usuario"**
 
-### 2. VALIDACIÓN DE SOSTENIBILIDAD (CRÍTICO)
-**Antes de hacer FINISH**, verifica:
-- ¿El último agente ({last_agent}) recomendó químicos sintéticos?
-- ¿'sustainability' ya revisó? (historial: {agent_history})
+### 2 VALIDACIÓN DE SOSTENIBILIDAD (CRÍTICO)
+**SI el último agente** (`{last_agent}`) **recomendó químicos sintéticos** **Y 'sustainability' NO ESTÁ EN**: {agent_history}
+→ **next_agent = "sustainability"**
+→ **info_for_next_agent = "Validar químicos recomendados por {last_agent} y proponer alternativas orgánicas"**
 
-**Si detectas químicos Y sustainability NO ha revisado:**
-→ next_agent = "sustainability"
-→ info_for_next_agent = "El agente {last_agent} recomendó: [resumen]. Evaluar alternativas orgánicas."
+### 3 EVALUAR COMPLETITUD DE LA RESPUESTA
 
-**Químicos a detectar**: pesticidas (clorpirifos, imidacloprid, paraquat), fertilizantes sintéticos (urea, superfosfato)
+Analiza las respuestas de los agentes:
 
-### 3. EVALUAR ÚLTIMA RESPUESTA
+**CASO A: RESPUESTA COMPLETA** 
+- Todas las respuestas de los agentes juntas responden la consulta original
+- No hay información faltante
+- No se necesita más análisis
 
-Analiza el último mensaje del historial:
+→ **next_agent = "FINISH"**
+→ **content = [SÍNTESIS UNIFICADA]** (VER REGLAS ABAJO)
 
-**CASO A: Respuesta Completa** ✅
-- La información disponible responde TOTALMENTE la consulta original
-- Todos los aspectos de la pregunta están cubiertos
-- No quedan dudas pendientes
-→ Acción: next_agent = "FINISH", sintetiza en `content`
+**CASO B: INFORMACIÓN FALTANTE QUE SOLO EL USUARIO PUEDE DAR**
+- Un agente pidió datos específicos (ej: "¿En qué etapa está tu cultivo?")
+- Ningún otro agente puede proporcionar esa info
 
-**CASO B: Falta Info que SOLO el usuario puede dar** 🙋
-- Un agente pidió datos que ningún otro agente puede proporcionar
-- Ejemplos:
-  * Nombre exacto de parcela (si lookup falló)
-  * Tipo de cultivo o etapa fenológica
-  * Mejor calidad de imagen
-  * Especificaciones del sistema de riego
-→ Acción: next_agent = "FINISH", pregunta clara en `content`
+→ **next_agent = "FINISH"**
+→ **content = [Pregunta clara al usuario]**
 
-**CASO C: Se necesita otro agente** 🔄
-- La respuesta es parcial o incompleta
-- Requiere expertise de otro dominio
-- Un agente mencionó "consultar con [otro agente]"
-→ Acción: Selecciona el agente apropiado, pasa contexto en `info_for_next_agent`
+**CASO C: SE NECESITA OTRO AGENTE**
+- La respuesta es parcial
+- Hay un agente que puede complementar la información
 
-**CASO D: Coordinación entre agentes** 🔗
-- Un agente pidió datos que OTRO agente SÍ puede proporcionar
-- Ejemplo: 'production' necesita clima → enrutar a 'water'
-→ Acción: Enruta al agente con las herramientas necesarias
+→ **next_agent = "[nombre_agente]"**
+→ **info_for_next_agent = "Qué necesitas que haga"**
 
-### 4. PREVENIR BUCLES INFINITOS
+**CASO D: COORDINACIÓN ENTRE AGENTES** 
+- El agente de vision cuando da su diagnostico se enruta luego a production
+- Un agente pidió datos que OTRO agente SÍ puede calcular/obtener
 
-**REGLAS ANTI-BUCLE:**
-- ❌ NO enrutes al mismo agente consecutivamente sin nueva info del usuario
-- ❌ Si el último agente devolvió saludo/pregunta genérica sin info nueva → FINISH
-- ❌ Si el mismo agente aparece 2+ veces seguidas en historial → FINISH con resumen
-- ✅ Solo re-enruta al mismo agente si el usuario dio información adicional
+→ **next_agent = "[agente_con_herramientas]"**
 
-**Último agente ejecutado**: {last_agent}
+### 4 PREVENIR BUCLES INFINITOS
+
+**ANTI-BUCLE:**
+- Si el mismo agente aparece 2+ veces seguidas → **FINISH**
+- Si un agente dice "no puedo ayudar" → **FINISH** (explicar limitación)
+- Si ya visitaste 5+ agentes → **FINISH** (sintetizar lo que hay)
+
+**Último agente**: {last_agent}
+**Historial**: {agent_history}
 
 ---
 
-## AGENTES DISPONIBLES Y SUS CAPACIDADES
+## AGENTES DISPONIBLES
 
-### 🔬 'vision' - Análisis de Imágenes
-**Cuándo usar**: SIEMPRE que haya imagen y no se haya usado aún
-**Capacidades**: Diagnóstico de enfermedades, plagas, deficiencias nutricionales
-**Herramientas**: Modelo de visión gemini-2.0-flash-exp
-**Salida**: Diagnóstico con nivel de confianza + tratamiento recomendado
-
-### 🌱 'production' - Optimización de Producción
-**Cuándo usar**:
-- Preguntas sobre salud de cultivos ("¿cómo está mi parcela?")
-- Problemas específicos (manchas, amarillamiento, plagas)
-- Mejora de rendimiento
-- Fertilización y nutrición
-**Palabras clave**: "salud", "rendimiento", "producción", "fertilizar", "plaga", "enfermedad", "NDVI"
-**Herramientas**: knowledge_base, get_parcel_health_indices (10 índices satelitales)
-**Salida**: Diagnóstico con NDVI/NDWI + recomendaciones + guarda en BD
-
-### 💧 'water' - Gestión Hídrica
-**Cuándo usar**:
-- Preguntas sobre riego ("¿necesito regar?")
-- Cálculo de necesidades de agua
-- Análisis de precipitación
-- Estrés hídrico
-**Palabras clave**: "riego", "agua", "seco", "humedad", "lluvia", "precipitación"
-**Herramientas**: weather_forecast, precipitation_data, calculate_water_requirements, NDWI
-**Salida**: Análisis integrado (clima + precipitación + NDVI/NDWI) + litros exactos
-
-### ⚠️ 'risk' - Análisis de Riesgos Climáticos
-**Cuándo usar**:
-- Preguntas sobre riesgos (heladas, sequías, calor)
-- Planificación preventiva
-- Planes de contingencia
-**Palabras clave**: "riesgo", "helada", "sequía", "calor extremo", "protección", "contingencia"
-**Herramientas**: historical_weather_summary (30-365 días), weather_forecast
-**Salida**: Nivel de riesgo (Bajo/Moderado/Alto/Crítico) + plan de mitigación
-
-### 💰 'supply_chain' - Comercialización
-**Cuándo usar**:
-- Preguntas sobre precios de mercado
-- Timing de cosecha/venta
-- Estrategias de comercialización
-**Palabras clave**: "precio", "vender", "mercado", "cuánto vale", "comercializar"
-**Herramientas**: get_market_price (API mock)
-**Salida**: Precio actual + tendencia + recomendación de timing
-
-### 🌿 'sustainability' - Agricultura Sostenible
-**Cuándo usar**:
-- Usuario menciona: "orgánico", "sostenible", "ecológico", "certificación", "bio"
-- Preguntas sobre alternativas a químicos
-- Manejo integrado de plagas (MIP/IPM)
-- Control biológico, compost, fertilizantes orgánicos
-- Certificación orgánica, sello verde, fair trade
-- **CRÍTICO**: Validación de químicos de otros agentes
-
-**REGLA ESPECIAL**: Si 'production' o 'risk' recomendaron pesticidas/fertilizantes químicos, **SIEMPRE** enrutar a 'sustainability' para evaluar alternativas orgánicas ANTES de FINISH.
-
-**Palabras clave**: "orgánico", "sostenible", "bio", "certificación", "sin químicos", "natural", "MIP", "control biológico"
-**Herramientas**: knowledge_base (prácticas sostenibles, IPM, certificaciones)
-**Salida**: Veredicto (Aprobado/Rechazado/Ajustes) + alternativas orgánicas
+- **vision**: Análisis de imágenes (enfermedades, plagas, deficiencias)
+- **production**: Rendimiento, Producción, fertilizantes, manejo (herramientas: knowledge_base_search)
+- **water**: Riego, precipitación, necesidades hídricas Gestión hídrica y parcelas (herramientas: list_user_parcels, get_parcel_details, get_weather_forecast, calculate_water_requirements, get_precipitation_data, estimate_soil_moisture_deficit)
+- **risk**: Alertas, planes de contingencia, análisis de riesgos climáticos (herramientas: get_historical_weather_summary)
+- **supply_chain**: Precios de mercado, comercialización
+- **sustainability** → Experto en agricultura sostenible, prácticas ecológicas y certificaciones. (herramientas: knowledge_base_search)
+    Debe ser consultado cuando:
+    * Usuario menciona palabras clave: "orgánico", "sostenible", "ecológico", "certificación", "bio", "verde"
+    * Usuario pregunta por alternativas a químicos: "sin pesticidas", "natural", "no tóxico"
+    * Otro agente propone prácticas que requieren validación ambiental
+    * Usuario pregunta por: manejo integrado de plagas (MIP/IPM), control biológico, compost, fertilizantes orgánicos
+    * Usuario quiere certificar su producción: "certificación orgánica", "sello verde", "fair trade"
+    * Consultas sobre impacto ambiental o biodiversidad en fincas
+    IMPORTANTE: Si otro agente ya dio una recomendación con químicos sintéticos, SIEMPRE enrutar a 'sustainability' para que evalúe si hay alternativa orgánica antes de finalizar.
 
 ---
 
-## REGLAS CRÍTICAS
+## REGLAS PARA SÍNTESIS FINAL (cuando next_agent = FINISH)
 
-1. **Campo `content`**: SOLO se llena cuando `next_agent = "FINISH"`. En todos los demás casos, `content = ""`
+Cuando decidas **FINISH**, tu `content` debe ser una **respuesta unificada** que:
 
-2. **Campo `info_for_next_agent`**: Incluye:
-   - Contexto relevante de agentes previos
-   - Nombre de parcela si el usuario lo mencionó (NO inventes IDs)
-   - Resumen de lo que se necesita del próximo agente
-   - Si sustainability debe validar: "Agente X recomendó [químico]. Evaluar alternativa."
+1. **COMBINA** todas las respuestas de los agentes de forma coherente
+2. **ELIMINA** redundancias y contradicciones
+3. **ORGANIZA** la información de forma lógica
+4. **USA UN TONO** natural, directo y útil
+5. **INCLUYE** recomendaciones accionables si las hay
 
-3. **Validación de Sustainability**: 
-   - Si detectas químicos en respuesta de production/risk Y sustainability no ha revisado → Enrutar a sustainability
-   - Si sustainability ya revisó → Permitir FINISH
+**ESTRUCTURA SUGERIDA:**
 
-4. **No inventes datos**:
-   - No inventes IDs de parcelas
-   - No asumas información que el usuario no dio
-   - Si falta info, pregunta en FINISH
+[Resumen del diagnóstico/análisis si aplica]
 
-5. **Prioridades**:
-   1. Imagen → vision
-   2. Químicos sin validar → sustainability
-   3. Consulta específica → agente apropiado
-   4. Info completa → FINISH
+Recomendaciones:
+- [Punto 1]
+- [Punto 2]
+
+Advertencias importantes: [si las hay]
+
+Próximos pasos: [si aplica]
+
+**NO HAGAS:**
+- Listar "el agente X dijo..., el agente Y dijo..."
+- Repetir información idéntica de múltiples agentes
+- Dar respuestas genéricas tipo "consulta con un experto"
+- Incluir tecnicismos innecesarios
 
 ---
 
-## CONTEXTO ACTUAL
+## CONTEXTO ADICIONAL
+
 - **User ID**: {state.get('user_id')}
-- **Imagen presente**: {'Sí' if has_image else 'No'}
-- **Último agente**: {last_agent}
-- **Historial de agentes**: {agent_history}
-- **Razonamiento previo**: {reasoning_prev}
-- **Último mensaje contiene químicos**: {_contains_chemical_recommendation(last_message_content)}
+- **Conversation ID**: {conversation_id}
+- **Imagen**: {'Sí' if has_image else 'No'}
+- **Agentes consultados**: {agent_history}
+- **Total respuestas**: {len(agent_responses)}
+- **Tiene historial previo**: {'Sí - usa SOLO si el usuario hace referencia' if has_previous_context else 'No'}
 
 ---
 
-## EJEMPLOS DE DECISIÓN
+## IMPORTANTE
 
-**Ejemplo 1: Usuario con imagen**
-Input: [imagen] "¿Qué tiene mi planta?"
-Decisión: next_agent = "vision" (prioridad imagen)
+- Los mensajes en `messages` son la CONVERSACIÓN ACTUAL
+- El `chat_history` es SOLO para contexto si el usuario dice "como me llamo" o "qué me dijiste antes"
+- Tu respuesta final debe SINTETIZAR las respuestas de LOS AGENTES, no inventar información nueva
+- Si un agente no pudo responder algo, reconócelo y explica por qué
 
-**Ejemplo 2: Production recomendó químico**
-Production dijo: "Aplicar Imidacloprid para pulgones"
-Historial: ["production"]
-Decisión: next_agent = "sustainability" (validar químico)
-info_for_next_agent: "Production recomendó Imidacloprid. Evaluar alternativa orgánica."
-
-**Ejemplo 3: Sustainability ya validó**
-Historial: ["production", "sustainability"]
-Sustainability dijo: "Usar Chrysoperla carnea en vez de Imidacloprid"
-Decisión: next_agent = "FINISH"
-content: "Recomendación final: [síntesis de sustainability]"
-
-**Ejemplo 4: Falta información del usuario**
-Water preguntó: "¿Qué tipo de cultivo tienes?"
-Decisión: next_agent = "FINISH"
-content: "Necesito saber el tipo de cultivo para calcular necesidades de agua. ¿Es maíz, café, tomate...?"
-
-**Ejemplo 5: Coordinación entre agentes**
-Production identificó estrés hídrico por NDWI bajo
-Decisión: next_agent = "water"
-info_for_next_agent: "Production detectó estrés hídrico (NDWI < -0.3). Calcular necesidades de riego."
-
----
-
-Analiza cuidadosamente el historial completo antes de decidir. Tu objetivo es resolver la consulta del usuario de la manera más eficiente posible, con el mínimo de pasos, pero asegurando calidad y validación de sostenibilidad cuando aplique.
+Analiza cuidadosamente y decide.
 """
         ),
         MessagesPlaceholder(variable_name="messages"),
+        MessagesPlaceholder(variable_name="chat_history")
     ])
 
     # Invocar LLM con estructura
@@ -327,45 +238,145 @@ Analiza cuidadosamente el historial completo antes de decidir. Tu objetivo es re
         SupervisorDecision)
 
     try:
-        # Validar si se debe forzar enrutamiento a sustainability
+        # Validación de sostenibilidad forzada si es necesario
         if _should_validate_sustainability(last_agent, last_message_content, agent_history):
             print(
                 f"-- VALIDACIÓN FORZADA: Enrutando a sustainability para revisar químicos --")
+
+            supervisor_time = time.time() - supervisor_start_time
+
             return {
                 "next": "sustainability",
                 "reasoning": f"El agente {last_agent} recomendó químicos sintéticos. Validación de sostenibilidad requerida.",
-                "info_next_agent": f"El agente {last_agent} hizo recomendaciones que incluyen químicos sintéticos. Evaluar si existen alternativas orgánicas equivalentes antes de aprobar."
+                "info_next_agent": f"El agente {last_agent} hizo recomendaciones que incluyen químicos sintéticos. Evaluar si existen alternativas orgánicas equivalentes antes de aprobar.",
+                "time_breakdown": state.get("time_breakdown", {}) | {"supervisor": supervisor_time}
             }
 
-        # Decisión normal del supervisor
-        response = await structured_llm.ainvoke({"messages": state["messages"]})
+        # Invocar LLM para decisión
+        response = await structured_llm.ainvoke({"messages": state["messages"], "chat_history": state["chat_history"]})
 
-        # Logging
+        supervisor_time = time.time() - supervisor_start_time
+
         print(f"-- next_agent: {response.next_agent} --")
         print(f"-- reasoning: {response.reasoning} --")
-        print(f"-- info_for_next_agent: {response.info_for_next_agent} --\n")
+
+        # ====================================================================
+        # CAPTURA DE KPI: KT1 - EFICIENCIA DE ORQUESTACIÓN
+        # ====================================================================
 
         if response.next_agent == 'FINISH':
-            print(
-                f"-- content (respuesta final): {response.content[:100]}... --\n")
+            try:
+                # Calcular nodos visitados
+                nodes_visited = ["supervisor"] + \
+                    agent_history + ["supervisor", "FINISH"]
+                nodes_count = len(nodes_visited)
+
+                # Clasificar tipo de consulta
+                query_type = classify_query_type(user_query, has_image)
+
+                # Calcular nodos mínimos necesarios
+                nodes_minimum = calculate_minimum_nodes(query_type, has_image)
+
+                # REGISTRAR ORQUESTACIÓN (KT1)
+                kpi_logger.log_orchestration(
+                    user_id=state.get("user_id"),
+                    conversation_id=conversation_id,
+                    query_text=user_query[:500],  # Limitar longitud
+                    nodes_visited=nodes_visited,
+                    nodes_minimum=nodes_minimum,
+                    query_type=query_type,
+                    has_image=has_image
+                )
+
+                g_eff = nodes_minimum / nodes_count if nodes_count > 0 else 0
+
+                print(f"[KPI-KT1] ✓ Orquestación registrada")
+                print(f"[KPI-KT1]   Tipo: {query_type}")
+                print(
+                    f"[KPI-KT1]   Nodos: {nodes_count} (mínimo: {nodes_minimum})")
+                print(f"[KPI-KT1]   G_eff: {g_eff:.2f}")
+
+            except Exception as e:
+                print(f"[KPI-WARNING] Error al registrar orquestación: {e}")
+
+            # ==============================================================
+            # CAPTURA DE KPI: KA3 - LATENCIA DE INFERENCIA
+            # ==============================================================
+
+            try:
+                # Calcular tiempo total
+                total_time = state.get("total_start_time")
+                if total_time:
+                    total_elapsed = time.time() - total_time
+
+                    # Obtener desglose de tiempos
+                    time_breakdown = state.get("time_breakdown", {})
+                    time_breakdown["supervisor"] = time_breakdown.get(
+                        "supervisor", 0) + supervisor_time
+
+                    # REGISTRAR LATENCIA (KA3)
+                    kpi_logger.log_latency(
+                        user_id=state.get("user_id"),
+                        conversation_id=conversation_id,
+                        total_time=total_elapsed,
+                        time_breakdown=time_breakdown,
+                        has_image=has_image
+                    )
+
+                    threshold = 10.0 if has_image else 5.0
+                    status = "✓" if total_elapsed <= threshold else "✗"
+
+                    print(
+                        f"[KPI-KA3] {status} Latencia registrada: {total_elapsed:.2f}s")
+                    print(f"[KPI-KA3]   Threshold: {threshold}s")
+                    print(f"[KPI-KA3]   Desglose: {time_breakdown}")
+
+            except Exception as e:
+                print(f"[KPI-WARNING] Error al registrar latencia: {e}")
+
+            # ==============================================================
+            
+            save_conversation_log(
+                messages=state["messages"],
+                user_id=state.get("user_id", 0),
+                agent_history=agent_history,
+                conversation_id=conversation_id,
+                final_response=response.content
+            )
+
             return {
                 "next": response.next_agent,
                 "reasoning": response.reasoning,
                 "info_next_agent": response.info_for_next_agent,
-                "agent_history": [],  # Reset del historial al finalizar
+                "list_agent": state["list_agent"],
                 "messages": [AIMessage(content=response.content, name="supervisor")]
             }
+
         else:
+            print(f"-- info_for_next_agent: {response.info_for_next_agent} --\n")
+            # No es FINISH, continuar orquestación
+            time_breakdown = state.get("time_breakdown", {})
+            time_breakdown["supervisor"] = time_breakdown.get(
+                "supervisor", 0) + supervisor_time
             return {
                 "next": response.next_agent,
                 "reasoning": response.reasoning,
-                "info_next_agent": response.info_for_next_agent
+                "info_next_agent": response.info_for_next_agent,
+                "time_breakdown": time_breakdown
             }
 
     except Exception as e:
         print(f"ERROR en supervisor: {e}")
+
+        supervisor_time = time.time() - supervisor_start_time
+        time_breakdown = state.get("time_breakdown", {})
+        time_breakdown["supervisor"] = time_breakdown.get(
+            "supervisor", 0) + supervisor_time
+
         error_msg = "Disculpa, ocurrió un error al procesar tu solicitud. Por favor, intenta reformular tu pregunta."
+
         return {
             "messages": [AIMessage(content=error_msg, name="supervisor")],
-            "next": "FINISH"
+            "next": "FINISH",
+            "time_breakdown": time_breakdown
         }

@@ -9,7 +9,6 @@ from app.agents.agent_tools import (
     get_parcel_details,
     get_market_price,
     list_user_parcels,
-    save_recommendation,
 )
 
 llm_supply = ChatGoogleGenerativeAI(
@@ -22,7 +21,6 @@ supply_chain_tools = [
     get_market_price,
     get_parcel_details,
     list_user_parcels,
-    save_recommendation,
 ]
 
 SUPPLY_PROMPT = ChatPromptTemplate.from_messages([
@@ -103,25 +101,25 @@ c) Recomendar: temperatura, humedad, empaque, vida útil
 ## ESTRUCTURA DE RESPUESTA
 
 ```
-💰 ANÁLISIS DE MERCADO - [Producto]
+ANÁLISIS DE MERCADO - [Producto]
 
-📊 Precio Actual:
+Precio Actual:
 - Precio: $[X] USD/kg
-- Tendencia: [↗️ Alza / ↘️ Baja / ➡️ Estable]
+- Tendencia: [Alza / Baja / Estable]
 - Última actualización: [fecha]
 
-🎯 RECOMENDACIÓN:
+RECOMENDACIÓN:
 [Acción específica basada en tendencia y contexto]
 
-📈 Factores que Afectan el Precio:
+Factores que Afectan el Precio:
 - [Factor 1: ej. Estacionalidad - cosecha principal en X meses]
 - [Factor 2: ej. Calidad - certificaciones aumentan valor 15-30%]
 - [Factor 3: ej. Volumen - grandes cantidades requieren negociación]
 
-💡 Estrategia Sugerida:
+Estrategia Sugerida:
 [Plan de acción con cronograma]
 
-⚠️ Consideraciones:
+Consideraciones:
 [Costos de almacenamiento, riesgos, logística]
 ```
 
@@ -132,7 +130,6 @@ c) Recomendar: temperatura, humedad, empaque, vida útil
 **get_market_price(producto)** → Precio actual y tendencia (API mock)
 **get_parcel_details(parcel_id)** → Área para estimar producción
 **list_user_parcels({user_id})** → Ver todas las parcelas
-**save_recommendation(parcel_id, "supply_chain", texto)** → Guardar estrategia
 
 ---
 
@@ -158,7 +155,6 @@ Si el usuario pregunta por valor total de cosecha:
 3. Si API falla, informa y recomienda consultar fuentes locales
 4. Considera costos de almacenamiento vs. esperar mejor precio
 5. Menciona que precios son referenciales (pueden variar por región/calidad)
-6. **SIEMPRE** guarda estrategias de comercialización con `save_recommendation`
 
 ---
 
@@ -180,7 +176,6 @@ Flujo:
 5. Estimar producción: área × 50 ton/ha (promedio tomate)
 6. Calcular valor: producción × precio/kg
 7. Recomendar según tendencia
-8. save_recommendation() con estrategia de venta
 """
     ),
     MessagesPlaceholder(variable_name="messages"),
@@ -211,12 +206,11 @@ async def supply_chain_agent_node(state: GraphState) -> dict:
 
     try:
         response = await agent_executor.ainvoke({"messages": state["messages"]})
-        output = response.get("output", "No se pudo generar respuesta.")
 
-        print(f"-- Respuesta supply_chain: {output[:200]}... --\n")
+        print(f"-- Respuesta supply_chain: {response["output"][0]["text"]}... --\n")
 
         return {
-            "messages": [AIMessage(content=output, name="supply_chain")],
+            "messages": [AIMessage(content=response["output"][0]["text"], name="supply_chain")],
             "agent_history": state.get("agent_history", []) + ["supply_chain"]
         }
     except Exception as e:

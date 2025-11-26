@@ -5,7 +5,7 @@ class SupervisorDecision(BaseModel):
     """
     Decisión del supervisor sobre el siguiente paso en la orquestación.
     """
-    next_agent: Optional[Literal['production', 'water', 'supply_chain', 'risk', 'general', 'sustainability', 'vision', 'FINISH']] = Field(
+    next_agent: Optional[Literal['production', 'water', 'supply_chain', 'risk', 'sustainability', 'vision', 'FINISH']] = Field(
         description="El nombre del agente especializado al que se debe enrutar la consulta, o 'FINISH' si la consulta está completa. La respuesta nunca debe ser None"
     )
     reasoning: str = Field(
@@ -13,3 +13,14 @@ class SupervisorDecision(BaseModel):
     )
     info_for_next_agent: Optional[str] = Field(None, description="Información clave extraída para el próximo agente.")
     content: str = Field(description="Salida del analisis a las respuestas recopiladas de todos los agentes, para entregar una respuesta completa y precisa al usuario solo si next_agent es FINISH.")
+    
+class AgentResponse(BaseModel):
+    """
+    Estructura del agente sobre la respuesta
+    """
+    content: str = Field(
+        description="Respuesta final clara y directa para el usuario o supervisor."
+    )
+    reasoning: str = Field(
+        description="Breve explicación técnica de por qué se llegó a esta conclusión."
+    )

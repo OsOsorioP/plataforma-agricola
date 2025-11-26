@@ -3,12 +3,13 @@ from langchain.tools import tool
 from langchain_classic.tools.retriever import create_retriever_tool
 
 from app.services.vectorstore_service import vectorstore_service
-from app.services.rag_service import get_retriever
 from app.db.database import SessionLocal
 from app.db import db_models
 from app.core.config import OPENWEATHER_API_KEY, DATOS_GOV_API_KEY, DATOS_GOV_PASSWORD, DATOS_GOV_USER
-from app.utils.helper import (_extract_coordinates, _safe_json_response,
-                              _generate_climate_recommendations, _interpret_ndvi)
+from app.utils.helper import (
+    _extract_coordinates, _safe_json_response,
+    _generate_climate_recommendations
+)
 from app.services.sh_service import (
     get_ndvi,
     get_nbr,
@@ -21,6 +22,7 @@ from app.services.sh_service import (
     get_ndwi,
     get_savi,
 )
+from app.utils.agronomy_helpers import calculate_eto_penman_simplified
 
 from datetime import datetime, timedelta, date
 import requests
@@ -72,13 +74,13 @@ def get_parcel_details(parcel_id: int) -> str:
 
             # Características del suelo
             "soil_info": {
-                "soil_type": parcel.soil_type,
-                "soil_ph": parcel.soil_ph
+                "soil_type": parcel.soil_type if parcel.soil_type else None,
+                "soil_ph": parcel.soil_ph if parcel.soil_ph else None
             },
 
             # Sistema de riego
             "irrigation_info": {
-                "irrigation_type": parcel.irrigation_type
+                "irrigation_type": parcel.irrigation_type if parcel.irrigation_type else None
             },
 
             # Estado actual de salud
@@ -287,51 +289,6 @@ def get_parcel_location_by_id(parcel_id: int) -> str:
 
     finally:
         db.close()
-
-
-@tool
-def save_recommendation(parcel_id: int, agent_source: str, recommendation_text: str) -> str:
-    """
-    Guarda una recomendación generada por un agente en la base de datos.
-    Úsala SIEMPRE que des un consejo accionable específico.
-    """
-    db = SessionLocal()
-    try:
-        parcel = db.query(db_models.Parcel).filter(
-            db_models.Parcel.id == parcel_id
-        ).first()
-
-        if not parcel:
-            return _safe_json_response(False, error=f"Parcela {parcel_id} no encontrada")
-
-        # Validar que agent_source no esté vacío
-        if not agent_source or not agent_source.strip():
-            return _safe_json_response(False, error="El nombre del agente es requerido")
-
-        new_recommendation = db_models.Recommendation(
-            user_id=parcel.owner_id,
-            parcel_id=parcel_id,
-            agent_source=agent_source.strip(),
-            recommendation_text=recommendation_text.strip(),
-        )
-
-        db.add(new_recommendation)
-        db.commit()
-        db.refresh(new_recommendation)
-
-        return _safe_json_response(True, {
-            "recommendation_id": new_recommendation.id,
-            "parcel_id": parcel_id,
-            "agent_source": agent_source,
-            "message": "Recomendación guardada exitosamente"
-        })
-
-    except Exception as e:
-        db.rollback()
-        return _safe_json_response(False, error=f"Error al guardar: {str(e)}")
-    finally:
-        db.close()
-
 
 @tool
 def get_kpi_summary(parcel_id: int, kpi_name: str) -> str:
@@ -666,23 +623,46 @@ def get_historical_weather_summary(latitude: float, longitude: float, days_back:
 # HERRAMIENTAS DE CÁLCULO HÍDRICO (CORREGIDAS)
 # ============================================================================
 @tool
-def calculate_water_requirements(parcel_id: int, crop_type: str, growth_stage: str) -> str:
+def calculate_water_requirements(
+    parcel_id: int, 
+    crop_type: str, 
+    growth_stage: str,
+    temperature_c: float,            
+    humidity_percent: float,
+    wind_speed_ms: float,
+    effective_precipitation_mm: float = 0.0,  # NUEVO PARÁMETRO
+) -> str:
     """
     Calcula requerimientos hídricos usando método FAO-56 (simplificado).
 
     Parámetros:
     - parcel_id: ID de la parcela
-    - crop_type: 'maiz', 'cafe', 'arroz', 'papa', 'tomate', 'platano'
-    - growth_stage: 'inicial', 'desarrollo', 'maduracion', 'cosecha'
+    - crop_type: 'maiz', 'cafe', 'arroz', etc.
+    - growth_stage: Etapa fenológica (ej. 'crecimiento', 'floracion')
+    - temperature_c: Temperatura actual en Celsius (de get_weather_forecast)
+    - humidity_percent: Humedad actual en porcentaje (de get_weather_forecast)
+    - wind_speed_ms: Velocidad del viento en m/s (de get_weather_forecast)
+    - effective_precipitation_mm: Precipitación efectiva en mm/día (de get_precipitation_data)
     """
+    
+    stage_mapping = {
+        'preparacion': 'inicial',
+        'siembra': 'inicial',
+        'germinacion': 'inicial',
+        'crecimiento': 'desarrollo',
+        'floracion': 'maduracion',
+        'maduracion': 'maduracion',
+        'cosecha': 'cosecha',
+    }
+    
     # Coeficientes Kc por cultivo y etapa (FAO-56)
     kc_values = {
-        'maiz': {'inicial': 0.3, 'desarrollo': 0.7, 'maduracion': 1.2, 'cosecha': 0.6},
-        'cafe': {'inicial': 0.9, 'desarrollo': 0.95, 'maduracion': 0.95, 'cosecha': 0.95},
-        'arroz': {'inicial': 1.05, 'desarrollo': 1.1, 'maduracion': 1.2, 'cosecha': 0.9},
-        'papa': {'inicial': 0.5, 'desarrollo': 0.75, 'maduracion': 1.15, 'cosecha': 0.75},
-        'tomate': {'inicial': 0.6, 'desarrollo': 1.15, 'maduracion': 1.15, 'cosecha': 0.8},
-        'platano': {'inicial': 0.5, 'desarrollo': 1.1, 'maduracion': 1.2, 'cosecha': 1.1},
+        'maiz': {'inicial': 0.3, 'desarrollo': 0.7, 'maduracion': 1.15, 'cosecha': 0.6},
+        'cafe': {'inicial': 0.85, 'desarrollo': 0.95, 'maduracion': 1.0, 'cosecha': 0.95},
+        'arroz': {'inicial': 1.05, 'desarrollo': 1.15, 'maduracion': 1.2, 'cosecha': 0.95},
+        'papa': {'inicial': 0.5, 'desarrollo': 0.8, 'maduracion': 1.15, 'cosecha': 0.75},
+        'tomate': {'inicial': 0.6, 'desarrollo': 0.9, 'maduracion': 1.15, 'cosecha': 0.8},
+        'platano': {'inicial': 0.5, 'desarrollo': 1.05, 'maduracion': 1.15, 'cosecha': 1.1},
     }
 
     db = SessionLocal()
@@ -696,33 +676,87 @@ def calculate_water_requirements(parcel_id: int, crop_type: str, growth_stage: s
 
         crop_lower = crop_type.lower()
         stage_lower = growth_stage.lower()
+        
+        fao_stage = stage_mapping.get(stage_lower)
+        
+        if not fao_stage:
+            return _safe_json_response(False,
+                                       error=f"Etapa '{growth_stage}' no se pudo mapear a una etapa FAO válida.",
+                                       data={"valid_stages": list(stage_mapping.keys())})
 
         if crop_lower not in kc_values:
             return _safe_json_response(False,
                                        error=f"Cultivo '{crop_type}' no reconocido",
                                        data={"available_crops": list(kc_values.keys())})
 
-        if stage_lower not in kc_values[crop_lower]:
-            return _safe_json_response(False,
-                                       error=f"Etapa '{growth_stage}' inválida",
-                                       data={"valid_stages": list(kc_values[crop_lower].keys())})
+        kc = kc_values[crop_lower][fao_stage]
 
-        kc = kc_values[crop_lower][stage_lower]
+        # ETo usando Penman-Monteith simplificado
+        try:
+            eto_estimated = calculate_eto_penman_simplified(temperature_c, humidity_percent, wind_speed_ms)
+        except Exception:
+            eto_estimated = 4.5  # mm/día (Valor generalizado)
 
-        # ETo promedio para Colombia (puede variar por región)
-        # Rango típico: 3-5 mm/día
-        eto_estimated = 4.0  # mm/día
-
-        # ETc = ETo × Kc
-        etc = eto_estimated * kc
-
-        # Conversión a litros (1 mm sobre 1 m² = 1 litro)
+        # ETc = ETo × Kc (Evapotranspiración del Cultivo)
+        etc_base = eto_estimated * kc
+        
+        irrigation_type = parcel.irrigation_type.lower() if parcel.irrigation_type else 'secano'
+        soil_type = parcel.soil_type.lower() if parcel.soil_type else 'franco'
+        
+        percolation_loss = 0.0
+        evaporation_loss = 0.0
+        is_inundation = False
+        
+        # Caso especial: Arroz con inundación
+        if crop_lower == 'arroz' and irrigation_type == 'inundacion':
+            is_inundation = True
+            evaporation_loss = 3.0  # mm/día
+            
+            if 'arcilloso' in soil_type or 'pesado' in soil_type:
+                percolation_loss = 4.0  # mm/día
+            elif 'arenoso' in soil_type or 'ligero' in soil_type:
+                percolation_loss = 8.0  # mm/día
+            else:
+                percolation_loss = 5.0  # mm/día
+                 
+            etc_base += percolation_loss + evaporation_loss
+        
+        # ETc total (bruto, sin considerar lluvia)
+        etc_total_mm_day = etc_base
+        
+        # ===== CÁLCULO DE NECESIDAD NETA (LO QUE FALTABA) =====
+        # Necesidad neta = ETc - Precipitación Efectiva
+        net_requirement_mm_day = max(0.0, etc_total_mm_day - effective_precipitation_mm)
+        
+        # Conversión a litros
         area_m2 = parcel.area * 10000
-        water_liters_day = etc * area_m2
+        
+        # Volumen bruto (ETc sin lluvia)
+        water_liters_day_gross = etc_total_mm_day * area_m2
+        
+        # Volumen neto (ETc - P_eff) - ESTE ES EL QUE EL AGENTE DEBE RECOMENDAR
+        water_liters_day_net = net_requirement_mm_day * area_m2
 
-        # Eficiencia de riego típica (85% para goteo, 60% para aspersión)
-        efficiency = 0.75  # Asumimos valor intermedio
-        water_needed_with_losses = water_liters_day / efficiency
+        # Eficiencia de riego
+        efficiency = 0.75
+        water_needed_with_losses_gross = water_liters_day_gross / efficiency
+        water_needed_with_losses_net = water_liters_day_net / efficiency
+
+        # ===== RECOMENDACIÓN ACTUALIZADA =====
+        if net_requirement_mm_day == 0:
+            recommendation_text = (
+                f"No se requiere riego suplementario. "
+                f"La precipitación efectiva ({effective_precipitation_mm:.1f} mm/día) "
+                f"cubre la demanda del cultivo (ETc = {etc_total_mm_day:.1f} mm/día)."
+            )
+        else:
+            recommendation_text = (
+                f"Aplicar {int(water_liters_day_net)} litros/día (neto después de lluvia), "
+                f"o {int(water_needed_with_losses_net)} litros/día considerando pérdidas del sistema. "
+                f"ETc total: {etc_total_mm_day:.1f} mm/día. "
+                f"Precipitación efectiva: {effective_precipitation_mm:.1f} mm/día. "
+                f"Déficit: {net_requirement_mm_day:.1f} mm/día."
+            )
 
         return _safe_json_response(True, {
             "parcel_id": parcel_id,
@@ -731,21 +765,30 @@ def calculate_water_requirements(parcel_id: int, crop_type: str, growth_stage: s
             "area_m2": area_m2,
             "crop_type": crop_type,
             "growth_stage": growth_stage,
+            "fao_stage": fao_stage,
             "kc_coefficient": kc,
-            "eto_mm_day": eto_estimated,
-            "etc_mm_day": round(etc, 2),
+            "eto_mm_day": round(eto_estimated, 2),
+            "etc_mm_day": round(etc_total_mm_day, 2),  # ETc bruto
+            "effective_precipitation_mm_day": round(effective_precipitation_mm, 2),
+            "net_requirement_mm_day": round(net_requirement_mm_day, 2),  # NUEVO
             "water_requirements": {
-                "ideal_liters_per_day": round(water_liters_day, 2),
-                "with_losses_liters_per_day": round(water_needed_with_losses, 2),
-                "per_week_liters": round(water_liters_day * 7, 2),
-                "per_month_liters": round(water_liters_day * 30, 2)
+                # Valores BRUTOS (sin restar lluvia - para referencia)
+                "gross_ideal_liters_per_day": round(water_liters_day_gross, 2),
+                "gross_with_losses_liters_per_day": round(water_needed_with_losses_gross, 2),
+                
+                # Valores NETOS (restando lluvia - ESTOS SON LOS IMPORTANTES)
+                "net_ideal_liters_per_day": round(water_liters_day_net, 2),  # ESTE ES V_AGENTE
+                "net_with_losses_liters_per_day": round(water_needed_with_losses_net, 2),
+                
+                # Proyecciones semanales/mensuales NETAS
+                "net_per_week_liters": round(water_liters_day_net * 7, 2),
+                "net_per_month_liters": round(water_liters_day_net * 30, 2)
             },
             "efficiency_assumed": f"{efficiency * 100}%",
-            "recommendation": (
-                f"Aplicar {int(water_liters_day)} litros/día ideales, "
-                f"o {int(water_needed_with_losses)} litros/día considerando pérdidas del sistema. "
-                f"Total semanal: {int(water_liters_day * 7)} litros."
-            )
+            "is_inundation_model": is_inundation,
+            "percolation_mm_day": percolation_loss,
+            "evaporation_loss_mm_day": evaporation_loss,
+            "recommendation": recommendation_text
         })
 
     except Exception as e:

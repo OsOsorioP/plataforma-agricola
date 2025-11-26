@@ -10,7 +10,6 @@ from app.graph.graph_state import GraphState
 from app.agents.agent_tools import (
     get_weather_forecast,
     get_historical_weather_summary,
-    save_recommendation,
     get_precipitation_data,
     get_parcel_details,
     list_user_parcels,
@@ -30,7 +29,6 @@ risk_tools = [
     get_parcel_details,
     lookup_parcel_by_name,
     list_user_parcels,
-    save_recommendation,
 ]
 
 RISK_PROMPT = ChatPromptTemplate.from_messages([
@@ -97,22 +95,22 @@ get_historical_weather_summary(lat, lon, 30)  # Últimos 30 días
 
 ### 3. NIVELES DE RIESGO Y UMBRALES
 
-**🟢 RIESGO BAJO**
+**RIESGO BAJO**
 - Heladas: 0 días con T<2°C en últimos 30 días
 - Sequía: Precipitación >20mm/semana
 - Calor: 0-2 días con T>35°C
 
-**🟡 RIESGO MODERADO**
+**RIESGO MODERADO**
 - Heladas: 1-3 días con T<2°C
 - Sequía: Precipitación 10-20mm/semana
 - Calor: 3-7 días con T>35°C
 
-**🟠 RIESGO ALTO**
+**RIESGO ALTO**
 - Heladas: 4-7 días con T<2°C
 - Sequía: Precipitación <10mm/semana
 - Calor: 8-15 días con T>35°C
 
-**🔴 RIESGO CRÍTICO**
+**RIESGO CRÍTICO**
 - Heladas: >7 días con T<2°C
 - Sequía: Precipitación <5mm/semana por >3 semanas
 - Calor: >15 días con T>35°C
@@ -121,24 +119,24 @@ get_historical_weather_summary(lat, lon, 30)  # Últimos 30 días
 
 Para cada nivel de riesgo, propón acciones ESPECÍFICAS:
 
-**🟢 RIESGO BAJO → Monitoreo**
+**RIESGO BAJO → Monitoreo**
 - Revisar pronósticos diariamente
 - Preparar recursos preventivos
 - Mantener plan de contingencia actualizado
 
-**🟡 RIESGO MODERADO → Preparación**
+**RIESGO MODERADO → Preparación**
 - Activar alertas tempranas
 - Adquirir/verificar insumos necesarios
 - Capacitar personal en protocolos
 - Implementar medidas preventivas ligeras
 
-**🟠 RIESGO ALTO → Acción Preventiva**
+**RIESGO ALTO → Acción Preventiva**
 - Implementar medidas de protección inmediata
 - Aumentar frecuencia de monitoreo
 - Coordinar con proveedores de insumos
 - Activar protocolos de emergencia
 
-**🔴 RIESGO CRÍTICO → Respuesta de Emergencia**
+**RIESGO CRÍTICO → Respuesta de Emergencia**
 - Ejecutar plan de contingencia completo
 - Movilizar todos los recursos disponibles
 - Considerar pérdidas aceptables vs. inversión
@@ -169,20 +167,20 @@ Para cada nivel de riesgo, propón acciones ESPECÍFICAS:
 ### 6. ESTRUCTURA DE RESPUESTA
 
 ```
-⚠️ ANÁLISIS DE RIESGO CLIMÁTICO - [Parcela/Región]
+ANÁLISIS DE RIESGO CLIMÁTICO - [Parcela/Región]
 
-📊 Cuantificación del Riesgo:
+Cuantificación del Riesgo:
 - Tipo de riesgo: [Helada/Sequía/Calor/Otro]
 - Período analizado: [fechas]
 - Eventos detectados: [X días con condición crítica]
-- Nivel de riesgo: [🟢🟡🟠🔴] [Bajo/Moderado/Alto/Crítico]
+- Nivel de riesgo: [Bajo/Moderado/Alto/Crítico]
 
-📈 Datos Históricos:
+Datos Históricos:
 - Temperatura mín/máx: [valores]
 - Precipitación total: [mm]
 - Frecuencia del evento: [X% del tiempo]
 
-🛡️ PLAN DE MITIGACIÓN:
+PLAN DE MITIGACIÓN:
 
 **Acciones Inmediatas (0-24h):**
 1. [Acción específica con recursos necesarios]
@@ -196,11 +194,11 @@ Para cada nivel de riesgo, propón acciones ESPECÍFICAS:
 1. [Inversión/cambio a largo plazo]
 2. [Inversión/cambio a largo plazo]
 
-💰 Estimación de Costos:
+Estimación de Costos:
 - Medidas preventivas: [rango de inversión]
 - Costo de no actuar: [pérdidas potenciales]
 
-📅 Cronograma de Monitoreo:
+Cronograma de Monitoreo:
 - Revisar cada: [frecuencia]
 - Indicadores clave: [qué vigilar]
 ```
@@ -215,7 +213,6 @@ Para cada nivel de riesgo, propón acciones ESPECÍFICAS:
 **get_weather_forecast(coordenadas)** → Clima actual (para riesgos inminentes)
 **get_historical_weather_summary(lat, lon, dias)** → Análisis histórico CRÍTICO
 **get_precipitation_data(parcel_id, dias)** → Historial de lluvia
-**save_recommendation(parcel_id, "risk", texto)** → Guardar plan de contingencia
 
 ---
 
@@ -225,7 +222,6 @@ Para cada nivel de riesgo, propón acciones ESPECÍFICAS:
 2. **NUNCA** hagas evaluaciones de riesgo sin datos históricos
 3. **SIEMPRE** especifica nivel de riesgo (Bajo/Moderado/Alto/Crítico)
 4. **SIEMPRE** propón medidas para cada horizonte temporal (inmediato/corto/largo)
-5. **SIEMPRE** guarda planes de contingencia con `save_recommendation`
 6. Si el riesgo es CRÍTICO, menciona considerar seguros agrícolas
 7. Sé realista sobre costos y factibilidad de medidas
 
@@ -234,7 +230,6 @@ Para cada nivel de riesgo, propón acciones ESPECÍFICAS:
 ## CONTEXTO ACTUAL
 - **User ID**: {user_id}
 - **Info del supervisor**: {info_next_agent}
-- **Historial**: {agent_history}
 
 ---
 
@@ -250,7 +245,6 @@ Flujo:
 5. Determinar nivel de riesgo
 6. get_weather_forecast(coordenadas)  # Pronóstico inmediato
 7. Formular plan de mitigación según nivel
-8. save_recommendation(parcel_id, "risk", plan_completo)
 """
     ),
     MessagesPlaceholder(variable_name="messages"),
@@ -264,12 +258,10 @@ async def risk_agent_node(state: GraphState) -> dict:
 
     user_id = state.get("user_id", "N/A")
     info_next_agent = state.get("info_next_agent", "Sin información")
-    agent_history = state.get("agent_history", [])
 
     prompt = RISK_PROMPT.partial(
         user_id=user_id,
         info_next_agent=info_next_agent,
-        agent_history=agent_history
     )
 
     agent = create_tool_calling_agent(llm_risk, risk_tools, prompt)
@@ -283,13 +275,12 @@ async def risk_agent_node(state: GraphState) -> dict:
 
     try:
         response = await agent_executor.ainvoke({"messages": state["messages"]})
-        output = response.get("output", "No se pudo generar respuesta.")
 
-        print(f"-- Respuesta risk: {output[:200]}... --\n")
+        print(f"-- Respuesta risk: {response["output"][0]["text"]}... --\n")
 
         return {
-            "messages": [AIMessage(content=output, name="risk")],
-            "agent_history": state.get("agent_history", []) + ["risk"]
+            "messages": [AIMessage(content=response["output"][0]["text"], name="risk")],
+            "list_agent": state.get("list_agent", []) + ["risk"]
         }
     except Exception as e:
         print(f"-- ERROR risk: {e} --")
@@ -298,5 +289,5 @@ async def risk_agent_node(state: GraphState) -> dict:
                 content="Error al analizar riesgos. Por favor, especifica la parcela y el tipo de riesgo.",
                 name="risk"
             )],
-            "agent_history": state.get("agent_history", []) + ["risk"]
+            "list_agent": state.get("list_agent", []) + ["risk"]
         }
