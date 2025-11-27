@@ -1,0 +1,44 @@
+services:
+  # 1. API (Backend)
+  api:
+    build:
+      context: .
+      dockerfile: docker/prod.Dockerfile
+    container_name: agri_backend_prod
+    volumes:
+      - ./data/logs:/app/logs
+      - ./data/vector_store:/app/Vectorstore_db
+      - ./data/uploads:/app/uploads
+    env_file:
+      - .env
+    expose:
+      - "8000"
+    depends_on:
+      - db
+    restart: always
+
+  db:
+    image: postgres:15-alpine
+    container_name: agri_postgres_prod
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    volumes:
+      - postgres_data_prod:/var/lib/postgresql/data
+    restart: always
+
+  nginx:
+    image: nginx:alpine
+    container_name: agri_nginx
+    ports:
+      - "80:80"
+      # - "443:443" # HTTPS (Descomentar cuando se tenga SSL)
+    volumes:
+      - ./docker/nginx.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - api
+    restart: always
+
+volumes:
+  postgres_data_prod:

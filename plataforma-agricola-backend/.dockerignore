@@ -1,0 +1,29 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+
+# Logs locales y DBs locales (no queremos sobreescribir lo del contenedor)
+logs/
+data/
+Vectorstore_db/
+*.log
+*.sqlite
+
+# Docker
+docker-compose.yml
+Dockerfile
+.dockerignore
+
+# IDEs
+.vscode
+.idea

@@ -1,26 +1,43 @@
 services:
-  postgres_db:
-    image: postgres:13
+  api:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    container_name: agri_backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./app:/app/app
+      - ./data/logs:/app/logs
+      - ./data/vector_store:/app/Vectorstore_db
+      - ./data/uploads:/app/uploads
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql://postgres:admin@db:5432/agridb
+      - LOG_PATH=/app/logs
+    depends_on:
+      - db
+    restart: unless-stopped
+  db:
+    image: postgres:15-alpine
     container_name: agri_postgres
     environment:
-      POSTGRES_DB: agridb
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: admin
-      # Configuraciones importantes para UTF-8
-      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=en_US.UTF-8 --lc-ctype=en_US.UTF-8"
-      LC_ALL: en_US.UTF-8
-      LANG: en_US.UTF-8
+      POSTGRES_DB: agridb
+      LANG: en_US.utf8
+      LC_ALL: en_US.utf8
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     restart: unless-stopped
-    # Comando para asegurar UTF-8
-    command: >
-      postgres
-      -c client_encoding=UTF8
-      -c default_text_search_config=pg_catalog.english
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
 volumes:
   postgres_data:
-    driver: local
