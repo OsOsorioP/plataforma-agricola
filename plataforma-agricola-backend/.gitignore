@@ -180,5 +180,3 @@ alembic.ini
 Vectorstore_db/
 
 alembic/
-
-Knowledge_base/

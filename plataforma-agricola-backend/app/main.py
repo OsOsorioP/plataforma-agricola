@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api import users, parcels, chat, auth, mock_data, monitoring, alerts, kpi, validation
+from app.api.v1.router import api_router
 
 app = FastAPI(
     title="Plataforma Multiagrente para Agricultura Sostenible",
@@ -17,15 +17,7 @@ app.add_middleware(
     expose_headers=["Content-Type"]
 )
 
-app.include_router(router=users.router, prefix="/users", tags=["Users"])
-app.include_router(router=parcels.router, prefix="/parcels", tags=["Parcels"])
-app.include_router(router=chat.router, prefix="/chat", tags=["Chat"])
-app.include_router(router=auth.router, prefix="/auth", tags=["Authentication"])
-app.include_router(mock_data.router, prefix="/mock", tags=["Mock Data"])
-app.include_router(monitoring.router, prefix="/admin", tags=["Admin"])
-app.include_router(alerts.router, prefix="/alerts", tags=["Alerts"])
-app.include_router(kpi.router, prefix="/kpi", tags=["KPIs"])
-app.include_router(validation.router, prefix="/validate", tags=["Validation"])
+app.include_router(api_router, prefix="/v1")
 
 
 @app.get("/")
