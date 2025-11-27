@@ -1,7 +1,7 @@
 from langchain_core.messages import HumanMessage, AIMessage
-from app.graph.graph_builder import agent_graph
-from app.db import db_models
-from app.db.database import SessionLocal
+from app.graph.builder import agent_graph
+from app.db.models.chat import ChatMessage
+from app.db.session import SessionLocal
 from typing import Optional, List, Dict, Any
 
 import time
@@ -11,7 +11,7 @@ def save_chat_message(user_id: int, content: str, sender_type: str, attachement:
     """Guarda un mensaje en la base de datos."""
     db = SessionLocal()
     try:
-        db_message = db_models.ChatMessage(
+        db_message = ChatMessage.ChatMessage(
             user_id=user_id,
             content=content,
             sender_type=sender_type,
@@ -28,9 +28,9 @@ def load_chat_history(user_id: int):
     """Carga el historial para el contexto de LangChain (objetos Message)."""
     db = SessionLocal()
     try:
-        db_messages = db.query(db_models.ChatMessage)\
-            .filter(db_models.ChatMessage.user_id == user_id)\
-                .order_by(db_models.ChatMessage.timestamp.desc())\
+        db_messages = db.query(ChatMessage.ChatMessage)\
+            .filter(ChatMessage.ChatMessage.user_id == user_id)\
+                .order_by(ChatMessage.ChatMessage.timestamp.desc())\
                     .limit(10).all()
         db_messages.reverse()
         
@@ -50,8 +50,8 @@ def load_chat_history_api(user_id: int):
     """
     db = SessionLocal()
     try:
-        message_count = db.query(db_models.ChatMessage)\
-            .filter(db_models.ChatMessage.user_id == user_id).count()
+        message_count = db.query(ChatMessage.ChatMessage)\
+            .filter(ChatMessage.ChatMessage.user_id == user_id).count()
         
         if message_count == 0:
             # Mensaje de bienvenida por defecto si es nuevo usuario
@@ -60,7 +60,7 @@ def load_chat_history_api(user_id: int):
                 "sender_type": "ai"
             }
             
-            db_welcome_message = db_models.ChatMessage(
+            db_welcome_message = ChatMessage.ChatMessage(
                 user_id=user_id,
                 content=welcome_message["content"],
                 sender_type=welcome_message["sender_type"],
@@ -71,9 +71,9 @@ def load_chat_history_api(user_id: int):
             
             db_messages = [db_welcome_message]
         else:
-            db_messages = db.query(db_models.ChatMessage)\
-                .filter(db_models.ChatMessage.user_id == user_id)\
-                    .order_by(db_models.ChatMessage.timestamp.desc())\
+            db_messages = db.query(ChatMessage.ChatMessage)\
+                .filter(ChatMessage.ChatMessage.user_id == user_id)\
+                    .order_by(ChatMessage.ChatMessage.timestamp.desc())\
                         .limit(20).all() # Traemos los últimos 20 para el frontend
             db_messages.reverse()
         

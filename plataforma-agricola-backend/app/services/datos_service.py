@@ -1,3 +1,6 @@
+"""
+Futura implementación - si es conveniente 
+"""
 import pandas as pd
 from sodapy import Socrata
 

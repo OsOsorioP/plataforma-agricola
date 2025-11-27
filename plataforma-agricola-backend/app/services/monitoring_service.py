@@ -1,10 +1,11 @@
 import requests
 
 from sqlalchemy.orm import Session
-from app.db import db_models
+from app.db.models.parcel import Parcel
+from app.db.models.alert import Alert
 from app.core.config import OPENWEATHER_API_KEY
 
-def check_frost_risk_for_parcel(db: Session, parcel: db_models.Parcel):
+def check_frost_risk_for_parcel(db: Session, parcel: Parcel):
     """
     Verifica el pronóstico de heladas para una única parcela y crea una alerta si es necesario.
     """
@@ -35,13 +36,13 @@ def check_frost_risk_for_parcel(db: Session, parcel: db_models.Parcel):
             temp_min = forecast['main']['temp_min']
             if temp_min <= 2.0:
                 alert_message = f"¡Alerta de Helada! Se pronostica una temperatura mínima de {temp_min}°C para tu parcela '{parcel.name}' en las próximas 24 horas. Considera activar tu plan de contingencia."
-                existing_alert = db.query(db_models.Alert).filter(
-                    db_models.Alert.parcel_id == parcel.id,
-                    db_models.Alert.risk_type == "HELADA"
+                existing_alert = db.query(Alert).filter(
+                    Alert.parcel_id == parcel.id,
+                    Alert.risk_type == "HELADA"
                 ).first()
                 
                 if not existing_alert:
-                    new_alert = db_models.Alert(
+                    new_alert = Alert(
                         user_id=parcel.owner_id,
                         parcel_id=parcel.id,
                         risk_type="HELADA",
@@ -63,7 +64,7 @@ def run_proactive_monitoring(db: Session):
     Obtiene todas las parcelas y verifica el riesgo para cada una.
     """
     print("-- [MONITOREO] Iniciando ciclo de monitoreo proactivo... --")
-    all_parcels = db.query(db_models.Parcel).all()
+    all_parcels = db.query(Parcel).all()
     for parcel in all_parcels:
         check_frost_risk_for_parcel(db, parcel)
     print("-- [MONITOREO] Ciclo de monitoreo proactivo finalizado. --")
