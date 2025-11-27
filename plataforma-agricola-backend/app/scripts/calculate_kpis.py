@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from ..db.database import SessionLocal
+from ..db.session import SessionLocal
 from app.db import db_models
 
 

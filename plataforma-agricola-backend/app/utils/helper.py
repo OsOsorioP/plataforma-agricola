@@ -1,29 +1,30 @@
 from typing import Optional, Tuple, Dict, List
-from app.db.database import SessionLocal
-from app.db import db_models
+from app.db.session import SessionLocal
+from app.db.models.parcel import Parcel
+from app.db.models.user import User
 import os
 import json
 from datetime import datetime
 from typing import List, Any
-from app.utils.helper_KT1 import normalize_message_content
+from app.services.metrics.orchestration import normalize_message_content
 
-def _get_parcel_from_db(parcel_id: int) -> Optional[db_models.Parcel]:
+def _get_parcel_from_db(parcel_id: int) -> Optional[Parcel]:
     """Helper para obtener una parcela. Centraliza la lógica de consulta."""
     db = SessionLocal()
     try:
-        return db.query(db_models.Parcel).filter(
-            db_models.Parcel.id == parcel_id
+        return db.query(Parcel).filter(
+            Parcel.id == parcel_id
         ).first()
     finally:
         db.close()
 
 
-def _get_user_from_db(user_id: int) -> Optional[db_models.User]:
+def _get_user_from_db(user_id: int) -> Optional[User]:
     """Helper para obtener un usuario."""
     db = SessionLocal()
     try:
-        return db.query(db_models.User).filter(
-            db_models.User.id == user_id
+        return db.query(User).filter(
+            User.id == user_id
         ).first()
     finally:
         db.close()
